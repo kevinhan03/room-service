@@ -956,20 +956,18 @@ body{background-color:var(--bg);font-family:'Noto Sans KR',sans-serif;min-height
   CONTENT SCHEDULE
 ═══════════════════════════════ -->
 <div class="section" id="section-schedule">
-
   <div class="sch-page">
 
-    <!-- 헤더 -->
     <div class="sch-header">
       <h1 class="sch-title">콘텐츠 스케줄</h1>
-      <p class="sch-subtitle">게시물 예정 순서 관리 · 드래그로 순서 변경</p>
+      <p class="sch-subtitle">게시물 예정 순서 · 드래그로 순서 변경</p>
     </div>
 
     <!-- 추가 폼 -->
     <div class="sch-add-row">
       <div class="sch-add-inner">
         <select class="sch-sel" id="sch-format">
-          <option value="">📂  포맷</option>
+          <option value="">포맷 선택</option>
           <option value="Ingredient / Cuisine">Ingredient / Cuisine</option>
           <option value="Check-in">Check-in</option>
           <option value="Portrait">Portrait</option>
@@ -977,27 +975,15 @@ body{background-color:var(--bg);font-family:'Noto Sans KR',sans-serif;min-height
           <option value="The Edit">The Edit</option>
         </select>
         <input class="sch-field" id="sch-topic" type="text" placeholder="주제를 입력하세요">
-        <input class="sch-field sch-field-date" id="sch-date" type="date">
         <button class="sch-add-btn" onclick="scheduleAdd()">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           추가
         </button>
       </div>
     </div>
 
-    <!-- 컬럼 헤더 -->
-    <div class="sch-col-head">
-      <span class="sch-col-num">#</span>
-      <span class="sch-col-format">포맷</span>
-      <span class="sch-col-topic">주제</span>
-      <span class="sch-col-date">날짜</span>
-      <span class="sch-col-status">상태</span>
-      <span class="sch-col-memo">메모</span>
-      <span class="sch-col-del"></span>
-    </div>
-
-    <!-- 리스트 -->
-    <div class="sch-list" id="schedule-list"></div>
+    <!-- 카드 그리드 -->
+    <div class="sch-grid" id="schedule-list"></div>
 
     <!-- 빈 상태 -->
     <div class="sch-empty" id="schedule-empty">
@@ -1010,55 +996,47 @@ body{background-color:var(--bg);font-family:'Noto Sans KR',sans-serif;min-height
 </div>
 
 <style>
-/* ── 스케줄 페이지 ── */
-.sch-page{max-width:860px;margin:0 auto;padding:0 0 80px;}
-
-.sch-header{margin-bottom:32px;}
-.sch-title{font-family:'IM Fell English',serif;font-size:40px;color:var(--ink);letter-spacing:-0.01em;margin-bottom:6px;}
+.sch-page{max-width:900px;margin:0 auto;padding:0 0 80px;}
+.sch-header{margin-bottom:28px;}
+.sch-title{font-family:'IM Fell English',serif;font-size:40px;color:var(--ink);letter-spacing:-0.01em;margin-bottom:4px;}
 .sch-subtitle{font-size:13px;color:var(--warm);letter-spacing:0.04em;}
 
 /* 추가 폼 */
-.sch-add-row{margin-bottom:8px;}
-.sch-add-inner{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--linen);border-radius:10px;padding:10px 12px;transition:border-color .2s,box-shadow .2s;}
+.sch-add-row{margin-bottom:28px;}
+.sch-add-inner{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--linen);border-radius:10px;padding:10px 14px;transition:border-color .2s,box-shadow .2s;}
 .sch-add-inner:focus-within{border-color:var(--warm);box-shadow:0 0 0 3px rgba(186,117,23,0.08);}
-.sch-sel{font-family:'Noto Sans KR',sans-serif;font-size:13px;color:var(--warm);background:transparent;border:none;outline:none;cursor:pointer;padding:2px 4px;flex-shrink:0;}
-.sch-field{font-family:'Noto Sans KR',sans-serif;font-size:14px;color:var(--ink);background:transparent;border:none;outline:none;flex:1;padding:2px 8px;}
+.sch-sel{font-family:'Noto Sans KR',sans-serif;font-size:13px;color:var(--warm);background:transparent;border:none;outline:none;cursor:pointer;flex-shrink:0;}
+.sch-field{font-family:'Noto Sans KR',sans-serif;font-size:14px;color:var(--ink);background:transparent;border:none;outline:none;flex:1;padding:0 8px;}
 .sch-field::placeholder{color:var(--linen);}
-.sch-field-date{flex:0 0 130px;color:var(--warm);font-size:13px;}
-.sch-add-btn{display:flex;align-items:center;gap:6px;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;color:#fff;background:var(--ink);border:none;border-radius:7px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:opacity .2s;flex-shrink:0;}
+.sch-add-btn{display:flex;align-items:center;gap:6px;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;color:#fff;background:var(--ink);border:none;border-radius:7px;padding:8px 16px;cursor:pointer;white-space:nowrap;transition:opacity .2s;flex-shrink:0;}
 .sch-add-btn:hover{opacity:0.75;}
 
-/* 컬럼 헤더 */
-.sch-col-head{display:grid;grid-template-columns:32px 140px 1fr 110px 90px 1fr 32px;gap:0;padding:10px 16px;border-bottom:1px solid var(--linen);}
-.sch-col-head span{font-size:11px;letter-spacing:0.1em;color:var(--warm);text-transform:uppercase;}
+/* 카드 그리드 */
+.sch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
 
-/* 리스트 아이템 */
-.sch-row{display:grid;grid-template-columns:32px 140px 1fr 110px 90px 1fr 32px;gap:0;align-items:center;padding:14px 16px;border-bottom:0.5px solid var(--linen);cursor:grab;transition:background .15s;border-radius:8px;}
-.sch-row:hover{background:rgba(44,44,42,0.03);}
-.sch-row.dragging{opacity:0.35;cursor:grabbing;}
-.sch-row.drag-over{background:rgba(186,117,23,0.06);border-bottom-color:var(--amber);}
-.sch-row.done-row{opacity:0.45;}
+.sch-card{background:#fff;border:1px solid var(--linen);border-radius:12px;padding:20px;cursor:grab;transition:box-shadow .2s,border-color .2s;position:relative;user-select:none;}
+.sch-card:hover{box-shadow:0 4px 16px rgba(44,44,42,0.08);border-color:var(--linen);}
+.sch-card.dragging{opacity:0.35;cursor:grabbing;}
+.sch-card.drag-over{border-color:var(--amber);box-shadow:0 0 0 2px rgba(186,117,23,0.2);}
+.sch-card.done-card{opacity:0.45;}
 
-.sch-row-num{font-family:'IM Fell English',serif;font-size:18px;color:var(--linen);line-height:1;}
-.sch-row-format{display:flex;align-items:center;gap:7px;}
-.sch-row-format-bar{width:3px;height:16px;border-radius:2px;flex-shrink:0;}
-.sch-row-format-text{font-size:12px;color:var(--warm);letter-spacing:0.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sch-row-topic{font-size:14px;color:var(--ink);padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sch-row-topic-input{font-family:'Noto Sans KR',sans-serif;font-size:14px;color:var(--ink);background:transparent;border:none;outline:none;width:100%;padding:0 12px;}
-.sch-row-date{font-size:12px;color:var(--warm);}
-.sch-row-date-input{font-family:'Noto Sans KR',sans-serif;font-size:12px;color:var(--warm);background:transparent;border:none;outline:none;width:100%;}
+.sch-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.sch-card-num{font-family:'IM Fell English',serif;font-size:13px;color:var(--linen);}
+.sch-card-del{background:none;border:none;cursor:pointer;color:var(--linen);font-size:15px;padding:2px 6px;border-radius:5px;transition:color .2s,background .2s;opacity:0;line-height:1;}
+.sch-card:hover .sch-card-del{opacity:1;}
+.sch-card-del:hover{color:#C0392B;background:rgba(192,57,43,0.08);}
 
+.sch-card-format{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.sch-card-bar{width:3px;height:14px;border-radius:2px;flex-shrink:0;}
+.sch-card-format-text{font-size:11px;letter-spacing:0.1em;color:var(--warm);text-transform:uppercase;}
+
+.sch-card-topic{font-family:'Noto Sans KR',sans-serif;font-size:16px;color:var(--ink);font-weight:400;line-height:1.4;margin-bottom:16px;word-break:keep-all;}
+
+.sch-card-footer{display:flex;align-items:center;justify-content:space-between;}
 .sch-badge{display:inline-flex;align-items:center;font-size:11px;letter-spacing:0.04em;padding:4px 10px;border-radius:20px;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;white-space:nowrap;}
 .badge-planned{background:rgba(136,135,128,0.12);color:var(--warm);}
 .badge-inprogress{background:rgba(186,117,23,0.12);color:#854F0B;}
 .badge-done{background:rgba(29,158,117,0.12);color:#0F6E56;}
-
-.sch-row-memo{padding:0 8px;}
-.sch-row-memo-input{font-family:'Noto Sans KR',sans-serif;font-size:13px;color:var(--stone);background:transparent;border:none;outline:none;width:100%;cursor:text;}
-.sch-row-memo-input::placeholder{color:var(--linen);}
-.sch-row-del{display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--linen);font-size:16px;width:28px;height:28px;border-radius:6px;transition:color .2s,background .2s;opacity:0;}
-.sch-row:hover .sch-row-del{opacity:1;}
-.sch-row-del:hover{color:#C0392B;background:rgba(192,57,43,0.08);}
 
 /* 빈 상태 */
 .sch-empty{text-align:center;padding:80px 0;display:none;}
@@ -1067,183 +1045,124 @@ body{background-color:var(--bg);font-family:'Noto Sans KR',sans-serif;min-height
 .sch-empty-text{font-size:16px;color:var(--ink);margin-bottom:6px;}
 .sch-empty-sub{font-size:13px;color:var(--warm);}
 
-/* 모바일 대응 */
 @media(max-width:768px){
-  .sch-col-head{display:none;}
-  .sch-row{grid-template-columns:1fr;gap:6px;padding:16px;}
-  .sch-row-num{display:none;}
-  .sch-row-topic{padding:0;font-size:16px;font-weight:500;}
-  .sch-row-topic-input{padding:0;font-size:16px;}
-  .sch-row-date,.sch-row-date-input{font-size:12px;}
-  .sch-row-del{opacity:1;}
+  .sch-grid{grid-template-columns:1fr 1fr;}
   .sch-add-inner{flex-wrap:wrap;}
-  .sch-field-date{flex:0 0 100%;}
+  .sch-card-del{opacity:1;}
+}
+@media(max-width:480px){
+  .sch-grid{grid-template-columns:1fr;}
 }
 </style>
 
 <script>
 const SCHEDULE_KEY = 'roomservice_schedule';
 const FORMAT_COLORS = {
-  'Ingredient': '#BA7517', 'Check': '#1D9E75',
-  'Portrait': '#7F77DD', 'Object': '#B4B2A9', 'The': '#5F5E5A'
+  'Ingredient':'#BA7517','Check':'#1D9E75',
+  'Portrait':'#7F77DD','Object':'#B4B2A9','The':'#5F5E5A'
 };
+function scheduleSave(items){localStorage.setItem(SCHEDULE_KEY,JSON.stringify(items));}
+function scheduleLoad(){try{return JSON.parse(localStorage.getItem(SCHEDULE_KEY))||[];}catch{return[];}}
+function formatColor(fmt){const k=(fmt||'').split('/')[0].trim().split(' ')[0];return FORMAT_COLORS[k]||'#888780';}
 
-function scheduleSave(items) { localStorage.setItem(SCHEDULE_KEY, JSON.stringify(items)); }
-function scheduleLoad() { try { return JSON.parse(localStorage.getItem(SCHEDULE_KEY)) || []; } catch { return []; } }
-
-function formatColor(fmt) {
-  const key = (fmt || '').split('/')[0].trim().split(' ')[0];
-  return FORMAT_COLORS[key] || '#888780';
-}
-
-function scheduleRender() {
-  const items = scheduleLoad();
-  const list = document.getElementById('schedule-list');
-  const empty = document.getElementById('schedule-empty');
-  list.innerHTML = '';
-  if (items.length === 0) { empty.classList.add('show'); return; }
+function scheduleRender(){
+  const items=scheduleLoad();
+  const grid=document.getElementById('schedule-list');
+  const empty=document.getElementById('schedule-empty');
+  grid.innerHTML='';
+  if(items.length===0){empty.classList.add('show');return;}
   empty.classList.remove('show');
+  const sLabel={planned:'예정',inprogress:'작업중',done:'완료'};
+  const sBadge={planned:'badge-planned',inprogress:'badge-inprogress',done:'badge-done'};
 
-  const statusLabel = { planned:'예정', inprogress:'작업중', done:'완료' };
-  const badgeClass = { planned:'badge-planned', inprogress:'badge-inprogress', done:'badge-done' };
-
-  items.forEach((item, idx) => {
-    const color = formatColor(item.format);
-    const status = item.status || 'planned';
-    const dateStr = item.date
-      ? new Date(item.date + 'T00:00:00').toLocaleDateString('ko-KR', {month:'numeric',day:'numeric',weekday:'short'})
-      : '—';
-
-    const row = document.createElement('div');
-    row.className = 'sch-row' + (status === 'done' ? ' done-row' : '');
-    row.draggable = true;
-    row.dataset.idx = idx;
-    row.innerHTML = `
-      <span class="sch-row-num">${idx + 1}</span>
-      <div class="sch-row-format">
-        <span class="sch-row-format-bar" style="background:${color};"></span>
-        <span class="sch-row-format-text">${item.format || '—'}</span>
+  items.forEach((item,idx)=>{
+    const color=formatColor(item.format);
+    const status=item.status||'planned';
+    const card=document.createElement('div');
+    card.className='sch-card'+(status==='done'?' done-card':'');
+    card.draggable=true;
+    card.dataset.idx=idx;
+    card.innerHTML=`
+      <div class="sch-card-top">
+        <span class="sch-card-num">No.${String(idx+1).padStart(2,'0')}</span>
+        <button class="sch-card-del" onclick="scheduleDel(${idx})" title="삭제">×</button>
       </div>
-      <div class="sch-row-topic">
-        <input class="sch-row-topic-input" type="text" value="${item.topic || ''}"
-          onchange="scheduleUpdateField(${idx},'topic',this.value)"
-          onclick="event.stopPropagation()" placeholder="주제">
+      <div class="sch-card-format">
+        <span class="sch-card-bar" style="background:${color};"></span>
+        <span class="sch-card-format-text">${item.format||'—'}</span>
       </div>
-      <div class="sch-row-date">
-        <input class="sch-row-date-input" type="date" value="${item.date || ''}"
-          onchange="scheduleUpdateField(${idx},'date',this.value)"
-          onclick="event.stopPropagation()">
+      <div class="sch-card-topic">${item.topic||'주제 없음'}</div>
+      <div class="sch-card-footer">
+        <button class="sch-badge ${sBadge[status]}" onclick="scheduleToggleStatus(${idx})">${sLabel[status]}</button>
       </div>
-      <div>
-        <button class="sch-badge ${badgeClass[status]}"
-          onclick="scheduleToggleStatus(${idx})">${statusLabel[status]}</button>
-      </div>
-      <div class="sch-row-memo">
-        <input class="sch-row-memo-input" type="text" placeholder="메모 추가..."
-          value="${item.memo || ''}"
-          onchange="scheduleUpdateField(${idx},'memo',this.value)"
-          onclick="event.stopPropagation()">
-      </div>
-      <button class="sch-row-del" onclick="scheduleDel(${idx})" title="삭제">×</button>
     `;
-
-    row.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', idx);
-      setTimeout(() => row.classList.add('dragging'), 0);
+    card.addEventListener('dragstart',(e)=>{e.dataTransfer.setData('text/plain',idx);setTimeout(()=>card.classList.add('dragging'),0);});
+    card.addEventListener('dragend',()=>card.classList.remove('dragging'));
+    card.addEventListener('dragover',(e)=>{e.preventDefault();card.classList.add('drag-over');});
+    card.addEventListener('dragleave',()=>card.classList.remove('drag-over'));
+    card.addEventListener('drop',(e)=>{
+      e.preventDefault();card.classList.remove('drag-over');
+      const from=parseInt(e.dataTransfer.getData('text/plain'));
+      if(from===idx)return;
+      const arr=scheduleLoad();const[m]=arr.splice(from,1);arr.splice(idx,0,m);
+      scheduleSave(arr);scheduleRender();
     });
-    row.addEventListener('dragend', () => row.classList.remove('dragging'));
-    row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drag-over'); });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      row.classList.remove('drag-over');
-      const from = parseInt(e.dataTransfer.getData('text/plain'));
-      const to = idx;
-      if (from === to) return;
-      const arr = scheduleLoad();
-      const [m] = arr.splice(from, 1);
-      arr.splice(to, 0, m);
-      scheduleSave(arr);
-      scheduleRender();
-    });
-
-    list.appendChild(row);
+    grid.appendChild(card);
   });
 }
 
-function scheduleAdd() {
-  const format = document.getElementById('sch-format').value;
-  const topic = document.getElementById('sch-topic').value.trim();
-  const date = document.getElementById('sch-date').value;
-  if (!format || !topic) { alert('포맷과 주제를 입력해주세요'); return; }
-  const items = scheduleLoad();
-  items.push({ format, topic, date, status: 'planned', memo: '' });
-  scheduleSave(items);
-  scheduleRender();
-  document.getElementById('sch-topic').value = '';
-  document.getElementById('sch-date').value = '';
-  document.getElementById('sch-format').value = '';
+function scheduleAdd(){
+  const format=document.getElementById('sch-format').value;
+  const topic=document.getElementById('sch-topic').value.trim();
+  if(!format||!topic){alert('포맷과 주제를 입력해주세요');return;}
+  const items=scheduleLoad();
+  items.push({format,topic,status:'planned'});
+  scheduleSave(items);scheduleRender();
+  document.getElementById('sch-topic').value='';
+  document.getElementById('sch-format').value='';
 }
 
-function scheduleDel(idx) {
-  const items = scheduleLoad();
-  items.splice(idx, 1);
-  scheduleSave(items);
-  scheduleRender();
+function scheduleDel(idx){
+  const items=scheduleLoad();items.splice(idx,1);scheduleSave(items);scheduleRender();
 }
 
-function scheduleToggleStatus(idx) {
-  const items = scheduleLoad();
-  const order = ['planned','inprogress','done'];
-  const cur = items[idx].status || 'planned';
-  items[idx].status = order[(order.indexOf(cur) + 1) % order.length];
-  scheduleSave(items);
-  scheduleRender();
+function scheduleToggleStatus(idx){
+  const items=scheduleLoad();
+  const order=['planned','inprogress','done'];
+  const cur=items[idx].status||'planned';
+  items[idx].status=order[(order.indexOf(cur)+1)%order.length];
+  scheduleSave(items);scheduleRender();
 }
 
-function scheduleUpdateField(idx, field, val) {
-  const items = scheduleLoad();
-  items[idx][field] = val;
-  scheduleSave(items);
-  if (field === 'status') scheduleRender();
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && document.getElementById('sch-topic') === document.activeElement) scheduleAdd();
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'&&document.getElementById('sch-topic')===document.activeElement)scheduleAdd();
 });
-
 scheduleRender();
 
-// ── 탭 전환 ──────────────────────────────────────
-function switchTab(tab, el) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('section-' + tab).classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+function switchTab(tab,el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('section-'+tab).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({top:0,behavior:'smooth'});
 }
-
-function toggleDrawer() {
-  const drawer = document.getElementById('nav-drawer');
-  const btn = document.getElementById('hamburger');
-  const isOpen = drawer.classList.contains('open');
-  drawer.classList.toggle('open', !isOpen);
-  btn.classList.toggle('open', !isOpen);
-  document.body.style.overflow = isOpen ? '' : 'hidden';
+function toggleDrawer(){
+  const drawer=document.getElementById('nav-drawer');
+  const btn=document.getElementById('hamburger');
+  const isOpen=drawer.classList.contains('open');
+  drawer.classList.toggle('open',!isOpen);btn.classList.toggle('open',!isOpen);
+  document.body.style.overflow=isOpen?'':'hidden';
 }
-
-function drawerSwitch(tab, el) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('section-' + tab).classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach(t => {
-    t.classList.toggle('active', t.getAttribute('onclick') && t.getAttribute('onclick').includes("'" + tab + "'"));
+function drawerSwitch(tab,el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('section-'+tab).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>{
+    t.classList.toggle('active',t.getAttribute('onclick')&&t.getAttribute('onclick').includes("'"+tab+"'"));
   });
-  document.querySelectorAll('.drawer-item').forEach(d => d.classList.remove('active'));
-  el.classList.add('active');
-  toggleDrawer();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('.drawer-item').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active');toggleDrawer();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 </script>
-
 </body>
 </html>

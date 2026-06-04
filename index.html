@@ -4,575 +4,368 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>room.service V2</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Noto+Sans+KR:wght@300;400;500;700&family=Noto+Serif+KR:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --ink:#222321;
-  --muted:#6f716b;
-  --line:#d8dad2;
-  --paper:#f7f7f2;
-  --white:#ffffff;
-  --moss:#667b68;
-  --clay:#c26f55;
-  --sky:#587aa0;
-  --ochre:#b9904d;
-  --deep:#303b38;
-  --soft:#eef1ec;
-  --shadow:0 18px 50px rgba(34,35,33,.10);
-}
+:root{--ink:#222321;--muted:#686a64;--line:#d9dbd2;--paper:#f7f7f2;--white:#fff;--soft:#eef1ec;--deep:#303b38;--clay:#bd6b52;--moss:#667b68}
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{min-height:100vh;background:var(--paper);font-family:"Noto Sans KR",system-ui,sans-serif;color:var(--ink)}
+body{min-height:100vh;background:var(--paper);color:var(--ink);font-family:system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-.app-shell{min-height:100vh}
-.topbar{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;gap:28px;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(247,247,242,.92);backdrop-filter:blur(14px)}
-.brand{font-family:"IM Fell English",serif;font-size:21px;letter-spacing:.01em;color:var(--ink);white-space:nowrap}
-.tabs{display:flex;align-items:center;gap:4px;overflow-x:auto;height:100%;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{height:100%;display:inline-flex;align-items:center;border:0;background:transparent;color:var(--muted);padding:0 14px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid transparent;white-space:nowrap}
+a{color:inherit}
+.topbar{position:sticky;top:0;z-index:10;height:58px;display:flex;align-items:center;gap:20px;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(247,247,242,.95)}
+.brand{font-family:Georgia,serif;font-size:22px;white-space:nowrap}
+.build-badge{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 8px;background:#fff;white-space:nowrap}
+.tabs{display:flex;gap:4px;overflow-x:auto;height:100%}
+.tab{height:100%;border:0;background:transparent;color:var(--muted);padding:0 14px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid transparent;white-space:nowrap}
 .tab.active{color:var(--ink);border-bottom-color:var(--ink)}
-.template-link{margin-left:auto;color:var(--muted);font-size:12px;text-decoration:none;border:1px solid var(--line);padding:8px 11px;border-radius:6px;background:rgba(255,255,255,.5);white-space:nowrap}
-.template-link:hover{color:var(--ink);border-color:var(--muted)}
+.template-link{margin-left:auto;text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:8px 11px;background:#fff;white-space:nowrap}
 .section{display:none;padding:34px 28px 72px}
 .section.active{display:block}
 .inner{max-width:1180px;margin:0 auto}
-.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);gap:34px;align-items:stretch;min-height:calc(100vh - 118px)}
-.hero-copy{display:flex;flex-direction:column;justify-content:center;padding:22px 0}
-.kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--clay);font-weight:700;margin-bottom:20px}
-.hero h1{font-family:"IM Fell English","Noto Serif KR",serif;font-size:clamp(48px,8vw,104px);font-weight:400;line-height:.92;letter-spacing:0;margin-bottom:26px}
-.hero-lead{font-family:"Noto Serif KR",serif;font-size:clamp(22px,3.1vw,40px);line-height:1.34;max-width:720px;margin-bottom:24px}
-.hero-note{font-size:15px;line-height:1.8;color:var(--muted);max-width:660px}
-.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:34px}
-.btn{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:11px 15px;font-size:13px;display:inline-flex;align-items:center;gap:8px;text-decoration:none;min-height:42px}
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(340px,.95fr);gap:34px;align-items:center;min-height:calc(100vh - 120px)}
+.kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--clay);font-weight:700;margin-bottom:18px}
+h1{font-family:Georgia,serif;font-size:clamp(50px,8vw,100px);font-weight:400;line-height:.95;margin-bottom:26px}
+h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
+.hero-lead{font-size:clamp(22px,3vw,38px);line-height:1.35;max-width:720px;margin-bottom:22px;word-break:keep-all}
+.hero-note,.section-head p,.small,.status-line{font-size:13px;line-height:1.7;color:var(--muted)}
+.actions,.inline{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.actions{margin-top:32px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:11px 15px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;min-height:42px}
 .btn.secondary{background:transparent;color:var(--ink)}
-.btn.ghost{border-color:var(--line);background:#fff;color:var(--muted)}
-.btn:hover{opacity:.82}
-.workflow-panel{align-self:center;background:var(--white);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:24px;display:grid;gap:14px}
-.workflow-step{display:grid;grid-template-columns:42px 1fr;gap:14px;align-items:start;padding:14px;border-radius:7px;background:var(--soft)}
-.workflow-step:nth-child(2){background:#f4eee9}
-.workflow-step:nth-child(3){background:#edf1f6}
-.workflow-step:nth-child(4){background:#f4f0e5}
-.step-num{width:42px;height:42px;border-radius:999px;display:grid;place-items:center;background:var(--ink);color:#fff;font-family:"IM Fell English",serif;font-size:18px}
-.step-title{font-size:15px;font-weight:700;margin-bottom:5px}
-.step-text{font-size:13px;line-height:1.6;color:var(--muted)}
-.section-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:22px}
-.section-head h2{font-family:"IM Fell English","Noto Serif KR",serif;font-size:42px;font-weight:400}
-.section-head p{font-size:13px;color:var(--muted);line-height:1.6;max-width:560px}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.btn.ghost{background:#fff;color:var(--muted);border-color:var(--line)}
 .panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
-.span-4{grid-column:span 4}
-.span-5{grid-column:span 5}
-.span-7{grid-column:span 7}
-.span-8{grid-column:span 8}
-.span-12{grid-column:span 12}
+.workflow-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px;display:grid;gap:14px;box-shadow:0 18px 50px rgba(34,35,33,.08)}
+.workflow-step{display:grid;grid-template-columns:42px 1fr;gap:14px;padding:14px;border-radius:7px;background:var(--soft)}
+.step-num{width:42px;height:42px;border-radius:999px;background:var(--ink);color:#fff;display:grid;place-items:center;font-family:Georgia,serif}
+.step-title{font-size:15px;font-weight:700;margin-bottom:5px}
+.step-text{font-size:13px;line-height:1.65;color:var(--muted)}
+.section-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:22px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.span-4{grid-column:span 4}.span-5{grid-column:span 5}.span-7{grid-column:span 7}.span-12{grid-column:span 12}
+.stack,.research-output,.deck-list,.archive-list{display:grid;gap:10px}
 .label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .field,.textarea,.select{width:100%;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:11px 12px;outline:none}
-.textarea{min-height:126px;resize:vertical;line-height:1.65}
-.field:focus,.textarea:focus,.select:focus{border-color:var(--moss);box-shadow:0 0 0 3px rgba(102,123,104,.14)}
-.stack{display:grid;gap:12px}
-.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.textarea{min-height:118px;resize:vertical;line-height:1.65}
 .pill-list{display:flex;gap:8px;flex-wrap:wrap}
 .pill{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:999px;padding:7px 10px;font-size:12px}
 .pill.active{background:var(--deep);color:#fff;border-color:var(--deep)}
-.research-output{display:grid;gap:10px}
 .insight-card{border-left:4px solid var(--moss);background:var(--soft);padding:13px;border-radius:6px}
-.insight-card:nth-child(2){border-color:var(--clay);background:#f6eee9}
-.insight-card:nth-child(3){border-color:var(--sky);background:#eef2f7}
 .insight-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-.insight-body{font-size:14px;line-height:1.65}
-.archive-list{display:grid;gap:10px}
-.archive-item{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;display:grid;gap:8px}
+.insight-body{font-size:14px;line-height:1.65;white-space:pre-wrap}
+.archive-item{border:1px solid var(--line);border-radius:8px;background:#fff;padding:14px;display:grid;gap:8px}
 .archive-top{display:flex;justify-content:space-between;gap:10px;align-items:start}
 .archive-title{font-size:16px;font-weight:700}
 .archive-meta{font-size:12px;color:var(--muted)}
-.archive-actions{display:flex;gap:6px;flex-wrap:wrap}
-.mini-btn{border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--muted);font-size:12px;padding:7px 9px}
-.mini-btn:hover{border-color:var(--muted);color:var(--ink)}
-.canvas-preview{width:100%;max-width:360px;aspect-ratio:4/5;margin:0 auto;background:var(--deep);border-radius:8px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
-.canvas-photo{position:absolute;inset:0;background:linear-gradient(135deg,#5d6f66 0%,#d7c1aa 54%,#465f7b 100%);opacity:.78}
-.canvas-preview::after{content:"";position:absolute;inset:auto 0 0;height:58%;background:linear-gradient(to bottom,transparent,rgba(34,35,33,.94))}
+.mini-btn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:5px;font-size:12px;padding:7px 9px}
+.canvas-preview{width:100%;max-width:360px;aspect-ratio:4/5;margin:0 auto;background:linear-gradient(135deg,#5d6f66,#d7c1aa 55%,#465f7b);border-radius:8px;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(34,35,33,.10)}
+.canvas-preview:after{content:"";position:absolute;left:0;right:0;bottom:0;height:58%;background:linear-gradient(to bottom,transparent,rgba(34,35,33,.94))}
 .canvas-content{position:absolute;left:28px;right:28px;bottom:30px;color:#fff;z-index:2}
 .canvas-kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dfc099;margin-bottom:12px}
-.canvas-title{font-family:"IM Fell English","Noto Serif KR",serif;font-size:38px;line-height:.98;margin-bottom:12px}
-.canvas-hook{font-size:14px;line-height:1.55;color:rgba(255,255,255,.82)}
-.deck-list{display:grid;gap:10px}
+.canvas-title{font-family:Georgia,serif;font-size:38px;line-height:1;margin-bottom:12px}
+.canvas-hook{font-size:14px;line-height:1.55;white-space:pre-wrap;color:rgba(255,255,255,.86)}
 .deck-card{display:grid;grid-template-columns:34px 1fr;gap:10px;border:1px solid var(--line);border-radius:7px;padding:12px;background:#fff}
-.deck-no{width:34px;height:34px;display:grid;place-items:center;border-radius:999px;background:var(--soft);font-family:"IM Fell English",serif;color:var(--muted)}
+.deck-no{width:34px;height:34px;display:grid;place-items:center;border-radius:999px;background:var(--soft);font-family:Georgia,serif;color:var(--muted)}
 .deck-title{font-size:14px;font-weight:700;margin-bottom:4px}
-.deck-copy{font-size:13px;line-height:1.55;color:var(--muted)}
+.deck-copy{font-size:13px;line-height:1.6;color:var(--muted);white-space:pre-wrap}
+.editor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.editor-card{border:1px solid var(--line);border-radius:7px;background:#fff;padding:14px;display:grid;gap:10px}
+.editor-top{display:flex;align-items:center;gap:10px}
+.editor-no{width:30px;height:30px;border-radius:999px;background:var(--soft);display:grid;place-items:center;font-family:Georgia,serif;color:var(--muted);flex:0 0 auto}
+.editor-title-input{min-height:40px;font-size:14px;font-weight:700}
+.editor-copy-input{min-height:120px;font-size:14px;line-height:1.7}
+.preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.rs-slide{aspect-ratio:4/5;border:1px solid #d3d1c7;border-radius:3px;position:relative;overflow:hidden;box-shadow:0 18px 46px rgba(44,44,42,.10)}
+.rs-cover{background:#2c2c2a;color:#f1efe8;padding:44px 40px 52px;display:flex;flex-direction:column;justify-content:flex-end}
+.rs-logo{position:absolute;top:32px;right:36px;font-family:Georgia,serif;font-size:12px;letter-spacing:.16em;color:rgba(211,209,199,.58)}
+.rs-eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.rs-bar{width:2px;height:22px;background:#ba7517;display:inline-block}
+.rs-eyebrow-text{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#888780}
+.rs-cover-title{font-family:Georgia,serif;font-size:clamp(38px,5vw,58px);line-height:.92;font-weight:400;margin-bottom:20px;color:#f1efe8;word-break:keep-all}
+.rs-cover-copy{font-size:15px;line-height:1.7;color:rgba(241,239,232,.74);white-space:pre-wrap;word-break:keep-all}
+.rs-text{background:#f1efe8;color:#2c2c2a;padding:42px 38px 44px;display:flex;flex-direction:column}
+.rs-index{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#888780;margin-bottom:30px}
+.rs-title{font-family:Georgia,serif;font-size:36px;line-height:1;font-weight:400;margin-bottom:28px;color:#2c2c2a;word-break:keep-all}
+.rs-copy{font-size:16px;line-height:1.85;font-weight:300;color:#2c2c2a;white-space:pre-wrap;word-break:keep-all}
+.rs-footer{margin-top:auto;font-family:Georgia,serif;font-size:12px;letter-spacing:.16em;color:#d3d1c7}
+.rs-side{padding-left:calc(26% + 34px)}
+.rs-side:before{content:"";position:absolute;left:0;top:0;bottom:0;width:26%;background:#2c2c2a}
+.rs-side:after{content:"";position:absolute;left:calc(26% - 46px);top:0;bottom:0;width:46px;background:linear-gradient(to right,transparent,#f1efe8)}
+.preview-copy-btn{position:absolute;right:12px;bottom:12px;border:1px solid rgba(211,209,199,.85);background:rgba(255,255,255,.78);color:#5f5e5a;border-radius:3px;font-size:12px;padding:7px 9px;opacity:.28}
+.preview-copy-btn:hover{opacity:1}
 .export-box{background:var(--deep);color:#fff;border-radius:8px;padding:18px;display:grid;gap:12px}
 .export-box .label{color:#bfc9c3}
 .caption{white-space:pre-wrap;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:7px;padding:14px;line-height:1.7;font-size:14px}
-.status-line{font-size:12px;color:var(--muted);min-height:18px}
 .empty{padding:34px;text-align:center;border:1px dashed var(--line);border-radius:8px;color:var(--muted);background:rgba(255,255,255,.45)}
-.small{font-size:12px;color:var(--muted);line-height:1.6}
-@media(max-width:920px){
-  .topbar{padding:0 16px;gap:12px}
-  .template-link{display:none}
-  .section{padding:24px 16px 58px}
-  .hero{grid-template-columns:1fr;min-height:auto}
-  .workflow-panel{align-self:stretch}
-  .span-4,.span-5,.span-7,.span-8{grid-column:span 12}
-}
-@media(max-width:560px){
-  .hero h1{font-size:54px}
-  .hero-lead{font-size:24px}
-  .section-head{display:grid}
-  .section-head h2{font-size:36px}
-  .workflow-step{grid-template-columns:36px 1fr}
-  .step-num{width:36px;height:36px}
-}
+@media(max-width:920px){.topbar{padding:0 16px}.template-link{display:none}.section{padding:24px 16px 58px}.hero{grid-template-columns:1fr;min-height:auto}.span-4,.span-5,.span-7{grid-column:span 12}}
 </style>
 </head>
 <body>
-<div class="app-shell">
-  <nav class="topbar">
-    <div class="brand">room.service</div>
-    <div class="tabs" role="tablist" aria-label="room.service V2">
-      <button class="tab active" data-tab="overview" type="button">Overview</button>
-      <button class="tab" data-tab="research" type="button">Research</button>
-      <button class="tab" data-tab="archive" type="button">Archive</button>
-      <button class="tab" data-tab="create" type="button">Create</button>
-      <button class="tab" data-tab="export" type="button">Export</button>
+<nav class="topbar">
+  <div class="brand">room.service</div>
+  <div class="build-badge">V2 API Deck</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="overview" type="button">Overview</button>
+    <button class="tab" data-tab="research" type="button">Research</button>
+    <button class="tab" data-tab="archive" type="button">Archive</button>
+    <button class="tab" data-tab="create" type="button">Create</button>
+    <button class="tab" data-tab="export" type="button">Export</button>
+  </div>
+  <a class="template-link" href="room-service-templates.html">Template Archive</a>
+</nav>
+
+<main>
+  <section class="section active" id="section-overview">
+    <div class="inner hero">
+      <div>
+        <p class="kicker">ROOM.SERVICE V2</p>
+        <h1>Editorial<br>Card News<br>Studio</h1>
+        <p class="hero-lead">공간과 브랜드를 조사하고, 흥미로운 이유를 중심으로 카드뉴스 초안을 만든다.</p>
+        <p class="hero-note">일반 블로그, 커뮤니티, SNS 기능, 사용자 가입은 제외한다. 목표는 제작 시간을 줄이면서 정보 정확성과 room.service의 건조한 편집 톤을 지키는 것이다.</p>
+        <div class="actions">
+          <button class="btn" data-jump="research" type="button">URL로 시작</button>
+          <button class="btn secondary" data-jump="create" type="button">카드뉴스 만들기</button>
+        </div>
+      </div>
+      <div class="workflow-panel">
+        <article class="workflow-step"><div class="step-num">1</div><div><h3 class="step-title">Research</h3><p class="step-text">URL, 이름, 메모를 바탕으로 자료조사와 검증 포인트를 만든다.</p></div></article>
+        <article class="workflow-step"><div class="step-num">2</div><div><h3 class="step-title">Archive</h3><p class="step-text">쓸 만한 브리프를 Supabase 아카이브에 저장한다.</p></div></article>
+        <article class="workflow-step"><div class="step-num">3</div><div><h3 class="step-title">Create</h3><p class="step-text">Hook, Origin, Growth, Signature, Why it matters, Conclusion 구조로 카드 초안을 만든다.</p></div></article>
+        <article class="workflow-step"><div class="step-num">4</div><div><h3 class="step-title">Export</h3><p class="step-text">캡션과 Canva 작업 메모를 정리한다.</p></div></article>
+      </div>
     </div>
-    <a class="template-link" href="room-service-templates.html">Template Archive</a>
-  </nav>
+  </section>
 
-  <main>
-    <section class="section active" id="section-overview">
-      <div class="inner hero">
-        <div class="hero-copy">
-          <p class="kicker">ROOM.SERVICE V2</p>
-          <h1>Editorial<br>Card News<br>Studio</h1>
-          <p class="hero-lead">공간과 브랜드를 빠르게 리서치하고, 흥미로운 이유를 중심으로 카드뉴스 초안을 만든다.</p>
-          <p class="hero-note">일반 블로그, 커뮤니티, SNS 기능, 사용자 가입은 제외한다. 목표는 인스타그램 매거진 room.service의 제작 시간을 줄이면서 정보 정확성과 디자인 흐름을 지키는 것이다.</p>
-          <div class="hero-actions">
-            <button class="btn" data-jump="research" type="button">URL로 시작</button>
-            <button class="btn secondary" data-jump="create" type="button">카드뉴스 만들기</button>
-          </div>
+  <section class="section" id="section-research">
+    <div class="inner">
+      <div class="section-head"><div><p class="kicker">Research</p><h2>URL Based Research</h2></div><p>Perplexity로 자료를 조사하고 OpenAI가 room.service 스타일의 한국어 카드 초안으로 정리한다.</p></div>
+      <div class="grid">
+        <div class="panel span-5 stack">
+          <label><span class="label">Source URL</span><input id="sourceUrl" class="field" type="url" placeholder="https://example.com/place"></label>
+          <label><span class="label">Brand / Space Name</span><input id="placeName" class="field" type="text" placeholder="예: Hotel Somewhere"></label>
+          <label><span class="label">Category</span><select id="category" class="select"><option value="Space">Space</option><option value="Brand">Brand</option><option value="Hotel">Hotel</option><option value="Restaurant">Restaurant</option><option value="Shop">Shop</option><option value="Object">Object</option></select></label>
+          <label><span class="label">Notes</span><textarea id="researchNotes" class="textarea" placeholder="알고 있는 배경, 확인하고 싶은 점, 꼭 포함할 관점을 적어주세요."></textarea></label>
+          <div class="inline"><button id="generateResearch" class="btn" type="button">브리프 생성</button><button id="saveResearch" class="btn secondary" type="button">Archive 저장</button></div>
+          <p id="researchStatus" class="status-line"></p>
         </div>
-        <div class="workflow-panel" aria-label="V2 workflow">
-          <article class="workflow-step">
-            <div class="step-num">1</div>
-            <div><h3 class="step-title">Research</h3><p class="step-text">URL, 메모, 검증 포인트를 받아 브랜드와 공간의 핵심 맥락을 정리한다.</p></div>
-          </article>
-          <article class="workflow-step">
-            <div class="step-num">2</div>
-            <div><h3 class="step-title">Archive</h3><p class="step-text">리서치 결과를 로컬 아카이브에 저장하고 재사용할 소재로 관리한다.</p></div>
-          </article>
-          <article class="workflow-step">
-            <div class="step-num">3</div>
-            <div><h3 class="step-title">Create</h3><p class="step-text">"왜 이 공간이 흥미로운가"를 중심으로 카드 구성과 문장을 생성한다.</p></div>
-          </article>
-          <article class="workflow-step">
-            <div class="step-num">4</div>
-            <div><h3 class="step-title">Export</h3><p class="step-text">캡션, Canva 제작 메모, 템플릿 링크까지 한 번에 정리한다.</p></div>
-          </article>
+        <div class="panel span-7"><div class="research-output" id="researchOutput">
+          <div class="insight-card"><p class="insight-title">Editorial Question</p><p class="insight-body">이 공간이 단순히 예쁜 곳을 넘어 흥미로운 이유는 무엇인가?</p></div>
+          <div class="insight-card"><p class="insight-title">Accuracy First</p><p class="insight-body">운영 시간, 위치, 예약 방식, 가격처럼 변동 가능한 정보는 발행 전 확인 대상으로 남긴다.</p></div>
+          <div class="insight-card"><p class="insight-title">Card Angle</p><p class="insight-body">공간의 배경, 성장, 시그니처, 의미, 결론 순서로 카드 흐름을 만든다.</p></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="section-archive">
+    <div class="inner"><div class="section-head"><div><p class="kicker">Archive</p><h2>Research Archive</h2></div><p>저장된 브리프를 다시 불러와 Create와 Export에 반영한다.</p></div><div class="panel"><div id="archiveList" class="archive-list"></div></div></div>
+  </section>
+
+  <section class="section" id="section-create">
+    <div class="inner">
+      <div class="section-head"><div><p class="kicker">Create</p><h2>Card News Draft</h2></div><p>5~10장 구성으로 확장한다. Source Note는 카드로 만들지 않고 참고 자료로만 남긴다.</p></div>
+      <div class="grid">
+        <div class="panel span-4 stack">
+          <label><span class="label">Selected Topic</span><input id="createTitle" class="field" type="text" placeholder="공간 또는 브랜드명"></label>
+          <label><span class="label">Editorial Angle</span><textarea id="editorialAngle" class="textarea" placeholder="왜 이 공간이 흥미로운지 짧게 적어주세요."></textarea></label>
+          <label><span class="label">Hook Line</span><textarea id="hookLine" class="textarea" placeholder="장을 보러 가는 게 아니다.&#10;보여주러 간다."></textarea></label>
+          <div><span class="label">Format</span><div class="pill-list" id="formatPills"><button class="pill active" data-format="Check-in" type="button">Check-in</button><button class="pill" data-format="The Edit" type="button">The Edit</button><button class="pill" data-format="Object" type="button">Object</button><button class="pill" data-format="Portrait" type="button">Portrait</button></div></div>
+          <button id="generateDeck" class="btn" type="button">카드 초안 생성</button>
+          <a class="btn ghost" href="room-service-templates.html">템플릿 보기</a>
+        </div>
+        <div class="panel span-4"><div class="canvas-preview"><div class="canvas-content"><p class="canvas-kicker" id="previewFormat">Check-in</p><h3 class="canvas-title" id="previewTitle">room.service</h3><p class="canvas-hook" id="previewHook">첫 장은 반드시 흥미를 유발한다.</p></div></div></div>
+        <div class="panel span-4"><div class="deck-list" id="deckList"></div></div>
+        <div class="panel span-12 stack">
+          <div class="section-head" style="margin-bottom:4px">
+            <div><p class="kicker" style="margin-bottom:6px">Deck Editor</p><h2>Edit Cards</h2></div>
+            <p>카드 제목과 본문을 수정하면 리스트와 Preview Deck에 바로 반영된다.</p>
+          </div>
+          <div class="editor-grid" id="deckEditor"></div>
+        </div>
+        <div class="panel span-12 stack">
+          <div class="section-head" style="margin-bottom:4px">
+            <div><p class="kicker" style="margin-bottom:6px">Preview Deck</p><h2>4:5 Slides</h2></div>
+            <p>초안 카드가 1080×1350 비율로 어떻게 보일지 확인하고, 카드별 텍스트를 바로 복사한다.</p>
+          </div>
+          <div class="preview-grid" id="previewDeck"></div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="section" id="section-research">
-      <div class="inner">
-        <div class="section-head">
-          <div>
-            <p class="kicker">Research</p>
-            <h2>URL Based Research</h2>
-          </div>
-          <p>현재 버전은 입력한 URL과 메모를 바탕으로 편집용 리서치 브리프를 만든다. 실제 웹 수집은 이후 API 또는 수동 검증 단계와 연결한다.</p>
-        </div>
-        <div class="grid">
-          <div class="panel span-5 stack">
-            <label><span class="label">Source URL</span><input id="sourceUrl" class="field" type="url" placeholder="https://example.com/place"></label>
-            <label><span class="label">Brand / Space Name</span><input id="placeName" class="field" type="text" placeholder="예: Hotel Somewhere"></label>
-            <label><span class="label">Category</span>
-              <select id="category" class="select">
-                <option value="Space">Space</option>
-                <option value="Brand">Brand</option>
-                <option value="Hotel">Hotel</option>
-                <option value="Restaurant">Restaurant</option>
-                <option value="Shop">Shop</option>
-                <option value="Object">Object</option>
-              </select>
-            </label>
-            <label><span class="label">Notes</span><textarea id="researchNotes" class="textarea" placeholder="오픈 배경, 위치, 디자인 요소, 방문자 경험, 검증이 필요한 사실을 적어주세요."></textarea></label>
-            <div class="inline">
-              <button id="generateResearch" class="btn" type="button">브리프 생성</button>
-              <button id="saveResearch" class="btn secondary" type="button">Archive 저장</button>
-            </div>
-            <p id="researchStatus" class="status-line"></p>
-          </div>
-          <div class="panel span-7">
-            <div class="research-output" id="researchOutput">
-              <div class="insight-card">
-                <p class="insight-title">Editorial Question</p>
-                <p class="insight-body">이 공간이 단순히 예쁜 곳을 넘어 흥미로운 이유는 무엇인가?</p>
-              </div>
-              <div class="insight-card">
-                <p class="insight-title">Accuracy First</p>
-                <p class="insight-body">운영 시간, 위치, 설립자, 가격, 예약 방식처럼 변동 가능한 정보는 발행 전 확인 대상으로 남긴다.</p>
-              </div>
-              <div class="insight-card">
-                <p class="insight-title">Card Angle</p>
-                <p class="insight-body">공간의 배경, 디자인 언어, 경험 포인트, 방문 이유 순서로 카드 흐름을 만든다.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+  <section class="section" id="section-export">
+    <div class="inner">
+      <div class="section-head"><div><p class="kicker">Export</p><h2>Caption & Canva Pack</h2></div><p>캡션과 Canva 작업 체크리스트를 정리한다. Canva API 자동 연결은 아직 포함하지 않는다.</p></div>
+      <div class="grid">
+        <div class="panel span-7"><div class="export-box"><span class="label">Instagram Caption</span><div id="captionText" class="caption">Create에서 카드 초안을 생성하면 캡션이 여기에 준비됩니다.</div><div class="inline"><button id="copyCaption" class="btn secondary" type="button">캡션 복사</button><a class="btn ghost" href="room-service-templates.html">Canva 템플릿 메모 확인</a></div></div></div>
+        <div class="panel span-5 stack"><span class="label">Canva Export Checklist</span><div class="deck-list"><div class="deck-card"><div class="deck-no">1</div><div><p class="deck-title">Hook</p><p class="deck-copy">첫 장은 설명하지 않는다. 멈추게 한다.</p></div></div><div class="deck-card"><div class="deck-no">2</div><div><p class="deck-title">Facts</p><p class="deck-copy">Origin, Growth, Signature는 확인 가능한 정보로 쓴다.</p></div></div><div class="deck-card"><div class="deck-no">3</div><div><p class="deck-title">Tone</p><p class="deck-copy">짧다. 건조하다. 정보 밀도가 높다.</p></div></div><div class="deck-card"><div class="deck-no">4</div><div><p class="deck-title">Ban</p><p class="deck-copy">마케팅 문구, 과한 수식어, 감탄사는 쓰지 않는다.</p></div></div></div><p id="exportStatus" class="status-line"></p></div>
       </div>
-    </section>
+    </div>
+  </section>
+</main>
 
-    <section class="section" id="section-archive">
-      <div class="inner">
-        <div class="section-head">
-          <div>
-            <p class="kicker">Archive</p>
-            <h2>Research Archive</h2>
-          </div>
-          <p>저장된 리서치는 Supabase에 보관된다. 항목을 선택하면 Create와 Export에 바로 반영된다.</p>
-        </div>
-        <div class="panel">
-          <div id="archiveList" class="archive-list"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="section-create">
-      <div class="inner">
-        <div class="section-head">
-          <div>
-            <p class="kicker">Create</p>
-            <h2>Card News Draft</h2>
-          </div>
-          <p>에디토리얼 훅을 중심으로 6장 카드 구성을 만든다. 기존 디자인 템플릿은 별도 아카이브에서 확인할 수 있다.</p>
-        </div>
-        <div class="grid">
-          <div class="panel span-4 stack">
-            <label><span class="label">Selected Topic</span><input id="createTitle" class="field" type="text" placeholder="공간 또는 브랜드명"></label>
-            <label><span class="label">Editorial Angle</span><textarea id="editorialAngle" class="textarea" placeholder="왜 이 공간이 흥미로운지 짧게 적어주세요."></textarea></label>
-            <label><span class="label">Hook Line</span><textarea id="hookLine" class="textarea" placeholder="장을 보러 가는 게 아니다.&#10;보여주러 간다."></textarea></label>
-            <div>
-              <span class="label">Format</span>
-              <div class="pill-list" id="formatPills">
-                <button class="pill active" data-format="Check-in" type="button">Check-in</button>
-                <button class="pill" data-format="The Edit" type="button">The Edit</button>
-                <button class="pill" data-format="Object" type="button">Object</button>
-                <button class="pill" data-format="Portrait" type="button">Portrait</button>
-              </div>
-            </div>
-            <button id="generateDeck" class="btn" type="button">카드 초안 생성</button>
-            <a class="btn ghost" href="room-service-templates.html">템플릿 보기</a>
-          </div>
-          <div class="panel span-4">
-            <div class="canvas-preview" aria-label="Card cover preview">
-              <div class="canvas-photo"></div>
-              <div class="canvas-content">
-                <p class="canvas-kicker" id="previewFormat">Check-in</p>
-                <h3 class="canvas-title" id="previewTitle">room.service</h3>
-                <p class="canvas-hook" id="previewHook">공간을 흥미롭게 만드는 이유를 한 문장으로 압축합니다.</p>
-              </div>
-            </div>
-          </div>
-          <div class="panel span-4">
-            <div class="deck-list" id="deckList"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="section-export">
-      <div class="inner">
-        <div class="section-head">
-          <div>
-            <p class="kicker">Export</p>
-            <h2>Caption & Canva Pack</h2>
-          </div>
-          <p>카드뉴스 제작자가 바로 가져갈 수 있도록 캡션, 해시태그, Canva 작업 메모를 정리한다.</p>
-        </div>
-        <div class="grid">
-          <div class="panel span-7">
-            <div class="export-box">
-              <span class="label">Instagram Caption</span>
-              <div id="captionText" class="caption">Create에서 카드 초안을 생성하면 캡션이 여기에 준비됩니다.</div>
-              <div class="inline">
-                <button id="copyCaption" class="btn secondary" type="button">캡션 복사</button>
-                <a class="btn ghost" href="room-service-templates.html">Canva 템플릿 메모 확인</a>
-              </div>
-            </div>
-          </div>
-          <div class="panel span-5 stack">
-            <div>
-              <span class="label">Canva Export Checklist</span>
-              <div class="deck-list">
-                <div class="deck-card"><div class="deck-no">1</div><div><p class="deck-title">Cover</p><p class="deck-copy">공간의 첫 인상을 4:5 이미지와 한 줄 훅으로 고정</p></div></div>
-                <div class="deck-card"><div class="deck-no">2</div><div><p class="deck-title">Overview</p><p class="deck-copy">무엇을 하는 곳인지, 어디에 있는지, 기본 맥락 정리</p></div></div>
-                <div class="deck-card"><div class="deck-no">3</div><div><p class="deck-title">Evidence</p><p class="deck-copy">검증 필요한 사실은 발행 전 확인 리스트로 분리</p></div></div>
-                <div class="deck-card"><div class="deck-no">4</div><div><p class="deck-title">Caption</p><p class="deck-copy">카드에 없는 맥락과 저장할 이유를 본문에 보강</p></div></div>
-              </div>
-            </div>
-            <p id="exportStatus" class="status-line"></p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-</div>
-
-<script type="module">
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-const supabase = createClient(
-  'https://ioobqwtwnkaqxyemprld.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvb2Jxd3R3bmthcXh5ZW1wcmxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTEzMzgsImV4cCI6MjA5NjAyNzMzOH0.oRW_5WifOwi1naVJwBBLCN6umOcowg8iIT12uzCqH24'
-);
-
+<script>
+const supabaseUrl = "https://ioobqwtwnkaqxyemprld.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvb2Jxd3R3bmthcXh5ZW1wcmxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTEzMzgsImV4cCI6MjA5NjAyNzMzOH0.oRW_5WifOwi1naVJwBBLCN6umOcowg8iIT12uzCqH24";
 let currentFormat = "Check-in";
 let currentBrief = null;
 let currentDeck = [];
-
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
-function slugFromUrl(url){
-  try{
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./,"");
-  }catch{
-    return "source";
-  }
-}
+function safeText(value){return String(value ?? "").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function slugFromUrl(url){try{return new URL(url).hostname.replace(/^www\./,"")}catch{return "manual note"}}
+function makeDefaultHook(name){const target=name&&name!=="Untitled Space"?name:"그곳";return `${target}에 가는 게 아니다.\n${target}을 이해하러 간다.`}
 
-function makeDefaultHook(name){
-  const target = name && name !== "Untitled Space" ? name : "그곳";
-  return `${target}에 가는 게 아니다.\n${target}을 이해하러 간다.`;
+async function supabaseRequest(path,options={}){
+  const response=await fetch(`${supabaseUrl}/rest/v1/${path}`,{...options,headers:{apikey:supabaseAnonKey,Authorization:`Bearer ${supabaseAnonKey}`,"Content-Type":"application/json",Prefer:"return=representation",...(options.headers||{})}});
+  if(!response.ok) throw new Error(`Supabase ${response.status}: ${await response.text()}`);
+  if(response.status===204) return null;
+  return response.json();
 }
-
-async function loadArchive(){
-  const { data, error } = await supabase
-    .from('room_service_archive')
-    .select('*')
-    .order('inserted_at', { ascending: false })
-    .limit(30);
-  if(error) console.error('loadArchive:', error);
-  return data || [];
-}
-
-async function insertArchiveItem(brief){
-  const { error } = await supabase.from('room_service_archive').insert({
-    id: brief.id,
-    name: brief.name,
-    source_url: brief.sourceUrl,
-    category: brief.category,
-    source_name: brief.sourceName,
-    notes: brief.notes,
-    angle: brief.angle,
-    verification: brief.verification,
-    created_at_label: brief.createdAt
-  });
-  if(error) throw error;
-}
+async function loadArchive(){return supabaseRequest("room_service_archive?select=*&order=inserted_at.desc&limit=30",{method:"GET",headers:{Prefer:""}})}
+async function insertArchiveItem(brief){return supabaseRequest("room_service_archive",{method:"POST",body:JSON.stringify({id:brief.id,name:brief.name,source_url:brief.sourceUrl,category:brief.category,source_name:brief.sourceName,notes:brief.notes,angle:brief.angle,verification:brief.verification,created_at_label:brief.createdAt})})}
+async function fetchArchiveItem(id){const items=await supabaseRequest(`room_service_archive?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,{method:"GET",headers:{Prefer:""}});return items&&items[0]}
+async function deleteArchiveItem(id){return supabaseRequest(`room_service_archive?id=eq.${encodeURIComponent(id)}`,{method:"DELETE"})}
 
 function buildBrief(){
-  const name = $("#placeName").value.trim() || "Untitled Space";
-  const sourceUrl = $("#sourceUrl").value.trim();
-  const category = $("#category").value;
-  const notes = $("#researchNotes").value.trim();
-  const sourceName = sourceUrl ? slugFromUrl(sourceUrl) : "manual note";
-  const noteSeed = notes || "공간의 배경, 디자인 언어, 방문 경험을 추가하면 더 정확한 카드 구성이 만들어집니다.";
-
-  return {
-    id: Date.now(),
-    name,
-    sourceUrl,
-    category,
-    sourceName,
-    notes: noteSeed,
-    angle: `${name}은(는) ${category.toLowerCase()}를 통해 공간의 분위기와 브랜드 태도를 동시에 보여준다.`,
-    verification: "운영 시간, 위치, 예약 방식, 가격, 창립자/디자이너 정보는 발행 전 원문 또는 공식 채널로 재확인",
-    createdAt: new Date().toLocaleString("ko-KR")
-  };
+  const name=$("#placeName").value.trim()||"Untitled Space";
+  const sourceUrl=$("#sourceUrl").value.trim();
+  const category=$("#category").value;
+  const notes=$("#researchNotes").value.trim();
+  return {id:Date.now(),name,sourceUrl,category,sourceName:sourceUrl?slugFromUrl(sourceUrl):"manual note",notes:notes||"공간의 배경, 디자인 언어, 방문 경험을 추가하면 더 정확한 카드 구성이 만들어집니다.",angle:`${name}은(는) ${category.toLowerCase()}를 통해 공간의 분위기와 브랜드 태도를 동시에 보여준다.`,verification:"운영 시간, 위치, 예약 방식, 가격, 창립자/디자이너 정보는 발행 전 원문 또는 공식 채널로 재확인",createdAt:new Date().toLocaleString("ko-KR")};
 }
-
 function renderBrief(brief){
-  currentBrief = brief;
-  $("#researchOutput").innerHTML = `
-    <div class="insight-card">
-      <p class="insight-title">Editorial Angle</p>
-      <p class="insight-body">${brief.angle}</p>
-    </div>
-    <div class="insight-card">
-      <p class="insight-title">Research Notes</p>
-      <p class="insight-body">${brief.notes}</p>
-    </div>
-    <div class="insight-card">
-      <p class="insight-title">Verification</p>
-      <p class="insight-body">${brief.verification}</p>
-    </div>
-  `;
-  $("#createTitle").value = brief.name;
-  $("#editorialAngle").value = brief.angle;
-  $("#hookLine").value = makeDefaultHook(brief.name);
-  $("#previewTitle").textContent = brief.name;
-  $("#previewHook").textContent = $("#hookLine").value;
+  currentBrief=brief;
+  $("#researchOutput").innerHTML=`<div class="insight-card"><p class="insight-title">Editorial Angle</p><p class="insight-body">${safeText(brief.angle)}</p></div><div class="insight-card"><p class="insight-title">Research Notes</p><p class="insight-body">${safeText(brief.notes)}</p></div><div class="insight-card"><p class="insight-title">Verification</p><p class="insight-body">${safeText(brief.verification)}</p></div>`;
+  $("#createTitle").value=brief.name;
+  $("#editorialAngle").value=brief.angle;
+  $("#hookLine").value=makeDefaultHook(brief.name);
+  $("#previewTitle").textContent=brief.name;
+  $("#previewHook").textContent=$("#hookLine").value;
 }
-
+function renderFactsAndSources(result){
+  if(Array.isArray(result.researchFacts)) $("#researchOutput").insertAdjacentHTML("beforeend",result.researchFacts.slice(0,12).map((item)=>`<div class="insight-card"><p class="insight-title">${safeText(item.section||"Fact")} / ${safeText(item.confidence||"medium")}</p><p class="insight-body">${safeText(item.fact||"")}${item.sourceHint?`\n${safeText(item.sourceHint)}`:""}</p></div>`).join(""));
+  if(Array.isArray(result.sources)) $("#researchOutput").insertAdjacentHTML("beforeend",result.sources.slice(0,8).map((source)=>`<div class="insight-card"><p class="insight-title">Source</p><p class="insight-body">${source.url?`<a href="${safeText(source.url)}" target="_blank" rel="noreferrer">${safeText(source.title||source.url)}</a>`:safeText(source.title||"")}</p></div>`).join(""));
+}
 async function renderArchive(){
-  const list = $("#archiveList");
-  list.innerHTML = `<div class="empty">불러오는 중...</div>`;
-  const items = await loadArchive();
-  if(!items.length){
-    list.innerHTML = `<div class="empty">저장된 리서치가 없습니다. Research에서 첫 브리프를 저장하세요.</div>`;
-    return;
-  }
-  list.innerHTML = items.map((item)=>`
-    <article class="archive-item">
-      <div class="archive-top">
-        <div>
-          <p class="archive-title">${item.name}</p>
-          <p class="archive-meta">${item.category} / ${item.source_name} / ${item.created_at_label}</p>
-        </div>
-        <div class="archive-actions">
-          <button class="mini-btn" data-use="${item.id}" type="button">사용</button>
-          <button class="mini-btn" data-delete="${item.id}" type="button">삭제</button>
-        </div>
-      </div>
-      <p class="small">${item.angle}</p>
-    </article>
-  `).join("");
+  const list=$("#archiveList");
+  list.innerHTML=`<div class="empty">불러오는 중...</div>`;
+  try{
+    const items=await loadArchive();
+    if(!items.length){list.innerHTML=`<div class="empty">저장된 리서치가 없습니다. Research에서 첫 브리프를 저장하세요.</div>`;return}
+    list.innerHTML=items.map((item)=>`<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(item.name)}</p><p class="archive-meta">${safeText(item.category)} / ${safeText(item.source_name)} / ${safeText(item.created_at_label)}</p></div><div class="archive-actions"><button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button><button class="mini-btn" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div><p class="small">${safeText(item.angle)}</p></article>`).join("");
+  }catch(error){console.error(error);list.innerHTML=`<div class="empty">Archive를 불러오지 못했습니다. Supabase 테이블과 RLS 정책을 확인하세요.</div>`}
 }
-
 async function useArchive(id){
-  const { data } = await supabase
-    .from('room_service_archive')
-    .select('*')
-    .eq('id', id)
-    .single();
-  if(!data) return;
-  const item = {
-    name: data.name,
-    sourceUrl: data.source_url,
-    category: data.category,
-    sourceName: data.source_name,
-    notes: data.notes,
-    angle: data.angle,
-    verification: data.verification,
-    createdAt: data.created_at_label
-  };
-  $("#placeName").value = item.name;
-  $("#sourceUrl").value = item.sourceUrl || "";
-  $("#category").value = item.category;
-  $("#researchNotes").value = item.notes;
-  renderBrief(item);
-  switchTab("create");
+  const data=await fetchArchiveItem(id); if(!data) return;
+  const brief={id:data.id,name:data.name,sourceUrl:data.source_url,category:data.category,sourceName:data.source_name,notes:data.notes,angle:data.angle,verification:data.verification,createdAt:data.created_at_label};
+  $("#placeName").value=brief.name||""; $("#sourceUrl").value=brief.sourceUrl||""; $("#category").value=brief.category||"Space"; $("#researchNotes").value=brief.notes||"";
+  renderBrief(brief); switchTab("create");
 }
-
-async function deleteArchive(id){
-  await supabase.from('room_service_archive').delete().eq('id', id);
-  renderArchive();
-}
-
-function buildDeck(){
-  const title = $("#createTitle").value.trim() || "Untitled Space";
-  const angle = $("#editorialAngle").value.trim() || "이 공간은 방문보다 태도를 먼저 보여준다.";
-  const hook = $("#hookLine").value.trim() || makeDefaultHook(title);
-  currentDeck = [
-    ["Hook", hook],
-    ["Origin", "어디서 시작됐는지 쓴다. 설립자, 지역, 첫 목적을 확인한다."],
-    ["Growth", "어떻게 확장됐는지 쓴다. 지점, 협업, 메뉴, 이용 방식의 변화를 본다."],
-    ["Signature", "무엇으로 기억되는지 쓴다. 공간, 동선, 소재, 메뉴, 오브제를 고른다."],
-    ["Why it matters", angle],
-    ["Conclusion", "방문할 이유보다 저장할 이유를 남긴다."]
-  ];
-  $("#previewFormat").textContent = currentFormat;
-  $("#previewTitle").textContent = title;
-  $("#previewHook").textContent = hook;
-  renderDeck();
-  renderCaption();
-}
-
+async function deleteArchive(id){await deleteArchiveItem(id);renderArchive()}
 function renderDeck(){
-  $("#deckList").innerHTML = currentDeck.map((card,index)=>`
-    <div class="deck-card">
-      <div class="deck-no">${index + 1}</div>
-      <div>
-        <p class="deck-title">${card[0]}</p>
-        <p class="deck-copy">${card[1]}</p>
-      </div>
-    </div>
-  `).join("");
+  renderDeckList();
+  renderPreviewDeck();
+  renderDeckEditor();
 }
-
+function renderDeckList(){
+  $("#deckList").innerHTML=currentDeck.map((card,index)=>`<div class="deck-card"><div class="deck-no">${index+1}</div><div><p class="deck-title">${safeText(card[0])}</p><p class="deck-copy">${safeText(card[1])}</p></div></div>`).join("");
+}
+function renderPreviewDeck(){
+  const topic=safeText($("#createTitle").value.trim()||currentBrief?.name||"room.service");
+  $("#previewDeck").innerHTML=currentDeck.map((card,index)=>{
+    const title=safeText(card[0]);
+    const copy=safeText(card[1]);
+    const number=String(index+1).padStart(2,"0");
+    if(index===0){
+      return `<article class="rs-slide rs-cover"><span class="rs-logo">room.service</span><div class="rs-eyebrow"><span class="rs-bar"></span><span class="rs-eyebrow-text">${safeText(currentFormat)}</span></div><h3 class="rs-cover-title">${topic}</h3><p class="rs-cover-copy">${copy}</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+    }
+    const sideClass=index%2===0?" rs-side":"";
+    return `<article class="rs-slide rs-text${sideClass}"><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">room.service</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+  }).join("");
+}
+function renderDeckEditor(){
+  const editor=$("#deckEditor");
+  if(!editor) return;
+  editor.innerHTML=currentDeck.map((card,index)=>`<article class="editor-card"><div class="editor-top"><span class="editor-no">${index+1}</span><input class="field editor-title-input" data-card-title="${index}" value="${safeText(card[0])}" aria-label="Card ${index+1} title"></div><textarea class="textarea editor-copy-input" data-card-copy="${index}" aria-label="Card ${index+1} copy">${safeText(card[1])}</textarea></article>`).join("");
+}
 function renderCaption(){
-  const title = $("#createTitle").value.trim() || "Untitled Space";
-  const angle = $("#editorialAngle").value.trim() || "이 공간은 방문보다 태도를 먼저 보여준다.";
-  const hook = $("#hookLine").value.trim() || makeDefaultHook(title);
-  const hashtags = ["#roomservice", "#공간기록", "#브랜드아카이브"];
-  $("#captionText").textContent = `${title}\n\n${hook}\n\nOrigin.\nGrowth.\nSignature.\n\n${angle}\n\n확인 필요: 위치, 운영 시간, 예약 방식, 가격, 공식 표기.\n\n${hashtags.join(" ")}`;
+  const title=$("#createTitle").value.trim()||"Untitled Space";
+  const angle=$("#editorialAngle").value.trim()||"이 공간은 방문보다 태도를 먼저 보여준다.";
+  const hook=$("#hookLine").value.trim()||makeDefaultHook(title);
+  const hashtags=["#roomservice","#공간기록","#브랜드아카이브"];
+  $("#captionText").textContent=`${title}\n\n${hook}\n\nOrigin.\nGrowth.\nSignature.\n\n${angle}\n\n확인 필요: 위치, 운영 시간, 예약 방식, 가격, 공식 표기.\n\n${hashtags.join(" ")}`;
 }
-
-function switchTab(tab){
-  $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
-  $$(".section").forEach(section => section.classList.remove("active"));
-  $(`#section-${tab}`).classList.add("active");
-  window.scrollTo({top:0,behavior:"smooth"});
-  if(tab === "archive")renderArchive();
+function buildFallbackDeck(){
+  const title=$("#createTitle").value.trim()||"Untitled Space";
+  const angle=$("#editorialAngle").value.trim()||"이 공간은 방문보다 태도를 먼저 보여준다.";
+  const hook=$("#hookLine").value.trim()||makeDefaultHook(title);
+  currentDeck=[["Hook",hook],["Origin","어디서 시작됐는지 쓴다. 설립자, 지역, 첫 목적을 확인한다."],["Growth","어떻게 확장됐는지 쓴다. 지점, 협업, 메뉴, 이용 방식의 변화를 본다."],["Signature","무엇으로 기억되는지 쓴다. 공간, 동선, 소재, 메뉴, 오브제를 고른다."],["Why it matters",angle],["Conclusion","방문할 이유보다 저장할 이유를 남긴다."]];
+  $("#previewFormat").textContent=currentFormat; $("#previewTitle").textContent=title; $("#previewHook").textContent=hook; renderDeck(); renderCaption();
 }
-
-$$(".tab").forEach(button => button.addEventListener("click", () => switchTab(button.dataset.tab)));
-$$("[data-jump]").forEach(button => button.addEventListener("click", () => switchTab(button.dataset.jump)));
-
-$("#generateResearch").addEventListener("click", () => {
-  const brief = buildBrief();
-  renderBrief(brief);
-  $("#researchStatus").textContent = "리서치 브리프가 생성되었습니다.";
-});
-
-$("#saveResearch").addEventListener("click", async () => {
-  const brief = currentBrief || buildBrief();
-  $("#researchStatus").textContent = "저장 중...";
+async function buildDeck(){
+  const title=$("#createTitle").value.trim()||"Untitled Space";
+  const angle=$("#editorialAngle").value.trim()||"";
+  const hook=$("#hookLine").value.trim()||makeDefaultHook(title);
+  $("#previewTitle").textContent=title;
+  $("#previewHook").textContent=hook;
+  $("#captionText").textContent="카드 초안을 생성하는 중입니다...";
   try{
-    await insertArchiveItem(brief);
-    renderBrief(brief);
-    renderArchive();
-    $("#researchStatus").textContent = "Archive에 저장했습니다.";
-  }catch(e){
-    $("#researchStatus").textContent = "저장에 실패했습니다. 콘솔을 확인하세요.";
-    console.error(e);
+    const response=await fetch("/api/create-deck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,angle,hook,format:currentFormat,notes:currentBrief?.notes||$("#researchNotes").value.trim()||""})});
+    const result=await response.json();
+    if(!response.ok) throw new Error(result.error||"Create deck API failed.");
+    if(Array.isArray(result.cards)&&result.cards.length){
+      currentDeck=result.cards.map((card)=>[card.title,card.copy]);
+      renderDeck();
+    }
+    if(result.caption) $("#captionText").textContent=result.caption;
+  }catch(error){
+    console.error(error);
+    buildFallbackDeck();
+    $("#captionText").textContent+="\n\nAPI 생성에 실패해 기본 초안을 표시했습니다.";
   }
-});
-
-$("#archiveList").addEventListener("click", (event) => {
-  const use = event.target.closest("[data-use]");
-  const del = event.target.closest("[data-delete]");
-  if(use)useArchive(use.dataset.use);
-  if(del)deleteArchive(del.dataset.delete);
-});
-
-$("#formatPills").addEventListener("click", (event) => {
-  const pill = event.target.closest(".pill");
-  if(!pill)return;
-  currentFormat = pill.dataset.format;
-  $$("#formatPills .pill").forEach(item => item.classList.remove("active"));
-  pill.classList.add("active");
-  $("#previewFormat").textContent = currentFormat;
-});
-
-$("#generateDeck").addEventListener("click", buildDeck);
-
-$("#copyCaption").addEventListener("click", async () => {
+}
+function switchTab(tab){$$(".tab").forEach((b)=>b.classList.toggle("active",b.dataset.tab===tab));$$(".section").forEach((s)=>s.classList.remove("active"));$(`#section-${tab}`).classList.add("active");window.scrollTo({top:0,behavior:"smooth"});if(tab==="archive") renderArchive()}
+async function generateResearch(){
+  const seed=buildBrief(); $("#researchStatus").textContent="Perplexity로 자료조사 중...";
   try{
-    await navigator.clipboard.writeText($("#captionText").textContent);
-    $("#exportStatus").textContent = "캡션을 클립보드에 복사했습니다.";
-  }catch{
-    $("#exportStatus").textContent = "브라우저 권한 때문에 복사하지 못했습니다. 텍스트를 직접 선택해 주세요.";
-  }
-});
-
+    const response=await fetch("/api/research",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:seed.name,sourceUrl:seed.sourceUrl,category:seed.category,notes:seed.notes})});
+    const result=await response.json(); if(!response.ok) throw new Error(result.error||"Research API failed.");
+    renderBrief(result.brief); renderFactsAndSources(result);
+    if(Array.isArray(result.cards)&&result.cards.length){currentDeck=result.cards.map((card)=>[card.title,card.copy]);renderDeck()}
+    if(result.caption) $("#captionText").textContent=result.caption;
+    $("#researchStatus").textContent="Research API 결과를 반영했습니다.";
+  }catch(error){console.error(error);renderBrief(seed);$("#researchStatus").textContent="API 호출에 실패했습니다. 서버 실행 여부와 콘솔을 확인하세요."}
+}
+async function saveResearch(){
+  const brief=currentBrief||buildBrief(); $("#researchStatus").textContent="저장 중...";
+  try{await insertArchiveItem(brief);$("#researchStatus").textContent="Archive에 저장했습니다.";renderArchive()}catch(error){console.error(error);$("#researchStatus").textContent="저장에 실패했습니다. Supabase 테이블과 RLS 정책을 확인하세요."}
+}
+function bindEvents(){
+  $$(".tab").forEach((button)=>button.addEventListener("click",()=>switchTab(button.dataset.tab)));
+  $$("[data-jump]").forEach((button)=>button.addEventListener("click",()=>switchTab(button.dataset.jump)));
+  $("#generateResearch").addEventListener("click",generateResearch);
+  $("#saveResearch").addEventListener("click",saveResearch);
+  $("#archiveList").addEventListener("click",(event)=>{const use=event.target.closest("[data-use]");const del=event.target.closest("[data-delete]");if(use) useArchive(use.dataset.use);if(del) deleteArchive(del.dataset.delete)});
+  $("#deckEditor").addEventListener("input",(event)=>{
+    const titleField=event.target.closest("[data-card-title]");
+    const copyField=event.target.closest("[data-card-copy]");
+    const field=titleField||copyField;
+    if(!field) return;
+    const index=Number(field.dataset.cardTitle??field.dataset.cardCopy);
+    if(!currentDeck[index]) return;
+    if(titleField) currentDeck[index][0]=field.value;
+    if(copyField) currentDeck[index][1]=field.value;
+    renderDeckList();
+    renderPreviewDeck();
+  });
+  $("#previewDeck").addEventListener("click",async(event)=>{const button=event.target.closest("[data-copy-card]");if(!button)return;const card=currentDeck[Number(button.dataset.copyCard)];if(!card)return;const text=`${card[0]}\n\n${card[1]}`;try{await navigator.clipboard.writeText(text);button.textContent="복사됨";setTimeout(()=>button.textContent="복사",1200)}catch{button.textContent="실패";setTimeout(()=>button.textContent="복사",1200)}});
+  $("#formatPills").addEventListener("click",(event)=>{const pill=event.target.closest(".pill");if(!pill)return;currentFormat=pill.dataset.format;$$("#formatPills .pill").forEach((item)=>item.classList.remove("active"));pill.classList.add("active");$("#previewFormat").textContent=currentFormat});
+  $("#generateDeck").addEventListener("click",buildDeck);
+  $("#copyCaption").addEventListener("click",async()=>{try{await navigator.clipboard.writeText($("#captionText").textContent);$("#exportStatus").textContent="캡션을 클립보드에 복사했습니다."}catch{$("#exportStatus").textContent="브라우저 권한 때문에 복사하지 못했습니다."}});
+}
+bindEvents();
 renderArchive();
-buildDeck();
+buildFallbackDeck();
 </script>
 </body>
 </html>

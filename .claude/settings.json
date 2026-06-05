@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/dev/auto-feed-generator/auto-feed-generator/**)",
+      "mcp__supabase__list_tables",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "WebFetch(domain:magazinie.vercel.app)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_projects",
+      "mcp__claude_ai_Vercel__list_deployments"
+    ],
+    "additionalDirectories": [
+      "c:\\dev\\auto-feed-generator\\auto-feed-generator\\src\\pages",
+      "c:\\dev\\auto-feed-generator\\auto-feed-generator\\src\\types",
+      "c:\\dev\\auto-feed-generator\\auto-feed-generator\\src\\lib",
+      "c:\\dev\\auto-feed-generator\\auto-feed-generator\\src"
+    ]
+  }
+}

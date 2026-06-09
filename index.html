@@ -43,7 +43,15 @@
       </div>
     </div>
     <div class="inner today-dashboard">
-      <div class="section-head"><div><p class="kicker">Morning Queue</p><h2>Today’s Candidates</h2></div><p id="todaySchedule">매일 오전 7시 자동 수집 후 AI 점수순으로 정렬한다.</p></div>
+      <div class="section-head"><div><p class="kicker">Morning Queue</p><h2>Today’s Top 10</h2></div><p id="todaySchedule">AI 추천은 참고용이고, Kevin의 선택이 실제 취향 데이터가 된다.</p></div>
+      <div id="bulkActionBar" class="bulk-action-bar" aria-live="polite">
+        <div><strong id="selectedCount">0개 선택</strong><span>여러 후보를 한 번에 보관하거나 분류합니다.</span></div>
+        <div class="bulk-actions">
+          <button class="mini-btn" data-bulk-decision="saved_candidate" type="button" disabled>Save Candidate</button>
+          <button class="mini-btn" data-bulk-decision="dig_more" type="button" disabled>Move to Dig More</button>
+          <button class="mini-btn danger" data-bulk-decision="rejected" type="button" disabled>Reject</button>
+        </div>
+      </div>
       <div id="todayCandidates" class="today-grid"><div class="empty">오늘의 후보를 불러오는 중...</div></div>
     </div>
   </section>

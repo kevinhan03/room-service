@@ -91,9 +91,24 @@ export function renderArchiveItems(items) {
     const status = item.status || "Candidate";
     const sourceName = item.sourceName || item.source_name || type;
     const createdAt = item.createdAtLabel || item.created_at_label || "";
-    const angle = item.angle || item.oneLineSummary || item.whyThisFeelsGood || "";
+    const summary = item.oneLineSummary || item.notes || "아직 한줄 요약이 없습니다.";
+    const angle = item.angle || item.whyThisFeelsGood || "아직 editorial angle이 없습니다.";
+    const image = item.imageUrl
+      ? `<img src="${safeText(item.imageUrl)}" alt="" loading="lazy">`
+      : `<div class="archive-image-placeholder">${safeText(item.category || type)}</div>`;
+    const score = (label, value) => `<span>${label}<strong>${Number(value || 0)}</strong></span>`;
     const statusButton = (value, label) => `<button class="mini-btn status-btn${status === value ? " active" : ""}" data-status="${safeText(item.id)}" data-value="${value}" type="button"${status === value ? " disabled aria-current=\"true\"" : ""}>${label}</button>`;
-    return `<article class="archive-item" data-item-id="${safeText(item.id)}"><div class="archive-top"><div><p class="archive-title">${safeText(item.name || item.title)}</p><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)} / ${safeText(createdAt)}</p></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button><button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div><p class="small">${safeText(angle)}</p></article>`;
+    const sourceLink = item.sourceUrl ? `<a class="mini-btn" href="${safeText(item.sourceUrl)}" target="_blank" rel="noreferrer">원문</a>` : "";
+    return `<article class="archive-item archive-editorial" data-item-id="${safeText(item.id)}">
+      <div class="archive-image">${image}</div>
+      <div class="archive-content">
+        <div class="archive-top"><div><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)}</p><h3 class="archive-title">${safeText(item.name || item.title)}</h3></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button>${sourceLink}<button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div>
+        <p class="archive-summary">${safeText(summary)}</p>
+        <div class="archive-score-row">${score("Suitability", item.suitabilityScore)}${score("Taste", item.tasteFitScore)}${score("Visual", item.visualScore)}${score("Story", item.storyScore)}</div>
+        <div class="archive-angle"><span>Editorial angle</span><p>${safeText(angle)}</p></div>
+        <p class="archive-date">${safeText(createdAt)}</p>
+      </div>
+    </article>`;
   }).join("");
 }
 

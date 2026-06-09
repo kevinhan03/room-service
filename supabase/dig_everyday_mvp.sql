@@ -108,6 +108,13 @@ create table if not exists curation_items (
     status in ('Candidate', 'Approved', 'Hold', 'Rejected', 'Dig More Candidate')
   ),
   priority integer not null default 0,
+  human_decision text not null default 'none' check (
+    human_decision in ('none', 'post_today', 'saved_candidate', 'dig_more', 'rejected')
+  ),
+  human_saved boolean not null default false,
+  human_saved_at timestamptz,
+  last_recommended_at timestamptz,
+  recommendation_count integer not null default 0 check (recommendation_count >= 0),
   editor_note text,
   rejection_reason text,
   publish_target_date date,

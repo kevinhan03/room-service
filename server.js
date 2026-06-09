@@ -2,6 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { URL } = require("node:url");
+const { calculateRecommendationScore, recommendationTier } = require("./lib/recommendations");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 3000);
@@ -80,6 +81,7 @@ function userMessageForCode(code) {
     MISSING_PERPLEXITY_KEY: "Perplexity API 키가 설정되지 않았습니다. .env.local을 확인해 주세요.",
     MISSING_SUPABASE_KEY: "Supabase service role key가 설정되지 않았습니다. .env.local을 확인해 주세요.",
     SUPABASE_API_ERROR: "Supabase 저장/조회에 실패했습니다. 테이블, RLS, service role key를 확인해 주세요.",
+    MIGRATION_REQUIRED: "Supabase에 Human Saved migration이 필요합니다. supabase/migrations/20260609_human_saved.sql을 SQL Editor에서 실행해 주세요.",
     RSS_FETCH_ERROR: "RSS 피드를 가져오지 못했습니다. URL과 피드 형식을 확인해 주세요.",
     SOURCE_UNSUPPORTED: "이 사이트에서는 RSS 또는 정적 기사 목록을 찾지 못했습니다. JavaScript 렌더링이나 로그인/봇 차단이 필요할 수 있습니다.",
     API_TIMEOUT: "외부 API 응답 시간이 초과됐습니다. 잠시 후 다시 시도하세요.",
@@ -313,6 +315,11 @@ async function supabaseRequest(pathname, options = {}) {
   }, "Supabase API");
   const text = await response.text();
   if (!response.ok) {
+    const migrationMissing = response.status === 400
+      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count"].some((column) => text.includes(column));
+    if (migrationMissing) {
+      throw new AppError("Human Saved migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
+    }
     throw new AppError(`Supabase API failed with status ${response.status}.`, 502, "SUPABASE_API_ERROR", text.slice(0, 500));
   }
   if (!text || response.status === 204) return null;
@@ -348,29 +355,36 @@ function normalizeBoardRow(row) {
   const kevinFind = row.kevin_finds || null;
   const analysis = row.ai_analyses || null;
   const source = content || kevinFind || {};
+  const displayTitle = decodeXml(source.title || source.name || analysis?.generated_title || "Untitled Find");
   return {
     id: row.id,
     itemType: row.item_type,
     status: row.status,
     priority: row.priority,
+    humanDecision: row.human_decision || "none",
+    humanSaved: Boolean(row.human_saved),
+    humanSavedAt: row.human_saved_at || null,
+    lastRecommendedAt: row.last_recommended_at || null,
+    recommendationCount: Number(row.recommendation_count || 0),
     editorNote: row.editor_note || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     contentItemId: row.content_item_id,
     kevinFindId: row.kevin_find_id,
     aiAnalysisId: row.ai_analysis_id,
-    name: source.title || source.name || analysis?.generated_title || "Untitled Find",
-    title: source.title || source.name || analysis?.generated_title || "Untitled Find",
+    name: displayTitle,
+    title: displayTitle,
     sourceUrl: source.url || "",
-    sourceName: source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type),
+    sourceName: decodeXml(source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type)),
     category: analysis?.category || source.category || "Space",
-    notes: source.raw_content || source.notes || "",
-    angle: analysis?.editorial_angle || row.editor_note || "",
-    oneLineSummary: analysis?.one_line_summary || "",
+    notes: decodeXml(source.raw_content || source.notes || ""),
+    angle: decodeXml(analysis?.editorial_angle || row.editor_note || ""),
+    oneLineSummary: decodeXml(analysis?.one_line_summary || ""),
     whyThisFeelsGood: analysis?.why_this_feels_good || "",
     visualStrength: analysis?.visual_strength || "",
     kevinTasteFit: analysis?.kevin_taste_fit || "",
     recommendationReason: analysis?.recommendation_reason || "",
+    suggestedStatus: analysis?.suggested_status || "Candidate",
     suitabilityScore: analysis?.suitability_score ?? null,
     tasteFitScore: analysis?.taste_fit_score ?? null,
     visualScore: analysis?.visual_score ?? null,
@@ -387,10 +401,28 @@ function normalizeBoardRow(row) {
 function decodeXml(value) {
   return cleanString(value)
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      const codePoint = Number.parseInt(hex, 16);
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    })
+    .replace(/&#([0-9]+);/g, (match, decimal) => {
+      const codePoint = Number.parseInt(decimal, 10);
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    })
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
     .replace(/&#039;/g, "'")
     .replace(/&#39;/g, "'");
 }
@@ -472,6 +504,18 @@ function normalizeScore(value) {
   const score = Number(value);
   if (!Number.isFinite(score)) return null;
   return Math.max(0, Math.min(score <= 10 ? score * 10 : score, 100));
+}
+
+function decisionPatch(decision) {
+  const now = new Date().toISOString();
+  const patches = {
+    post_today: { human_decision: "post_today", human_saved: true, human_saved_at: now, status: "Approved" },
+    saved_candidate: { human_decision: "saved_candidate", human_saved: true, human_saved_at: now, status: "Candidate" },
+    dig_more: { human_decision: "dig_more", human_saved: true, human_saved_at: now, status: "Dig More Candidate" },
+    rejected: { human_decision: "rejected", human_saved: false, human_saved_at: null, status: "Rejected" }
+  };
+  if (!patches[decision]) throw new AppError("decision is not supported.", 400, "INVALID_INPUT", decision);
+  return { ...patches[decision], updated_at: now };
 }
 
 function normalizeAnalysisForDb(analysis, category) {
@@ -747,7 +791,7 @@ async function collectSource(source, limit = autoCollectLimit) {
           item_type: "daily_find",
           content_item_id: contentItem.id,
           ai_analysis_id: aiAnalysis?.id || null,
-          status: analysis.suggested_status || "Candidate",
+          status: "Candidate",
           editor_note: analysis.editorial_angle || analysis.one_line_summary || ""
         })
       });
@@ -927,16 +971,73 @@ async function handleListBoard(req, res) {
   }
 }
 
-async function handleToday(req, res) {
+async function handleTodayRecommendations(req, res) {
   try {
-    const todayStart = `${getZonedParts().date}T00:00:00+09:00`;
-    const rows = await supabaseRequest(`curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&status=in.(Candidate,Approved,Dig%20More%20Candidate)&created_at=gte.${encodeURIComponent(todayStart)}&order=created_at.desc&limit=100`, { method: "GET", headers: { Prefer: "" } });
-    const items = (rows || []).map(normalizeBoardRow).sort((a, b) => {
-      const scoreA = [a.suitabilityScore, a.tasteFitScore, a.visualScore, a.storyScore].reduce((sum, value) => sum + (normalizeScore(value) || 0), 0);
-      const scoreB = [b.suitabilityScore, b.tasteFitScore, b.visualScore, b.storyScore].reduce((sum, value) => sum + (normalizeScore(value) || 0), 0);
-      return scoreB - scoreA;
-    }).slice(0, 12);
-    sendJson(res, 200, { items, schedule: { time: autoCollectTime, timezone: autoCollectTimezone } });
+    const rows = await supabaseRequest("curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&status=eq.Candidate&human_decision=neq.rejected&order=created_at.desc&limit=100", { method: "GET", headers: { Prefer: "" } });
+    const now = Date.now();
+    const items = (rows || [])
+      .map(normalizeBoardRow)
+      .map((item) => ({ ...item, finalScore: calculateRecommendationScore(item) }))
+      .sort((a, b) => recommendationTier(a, now) - recommendationTier(b, now)
+        || b.finalScore - a.finalScore
+        || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10);
+
+    const recommendedAt = new Date().toISOString();
+    await Promise.all(items.map((item) => supabaseRequest(`curation_items?id=eq.${encodeURIComponent(item.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        last_recommended_at: recommendedAt,
+        recommendation_count: item.recommendationCount + 1
+      })
+    })));
+
+    sendJson(res, 200, {
+      items: items.map((item) => ({
+        ...item,
+        lastRecommendedAt: recommendedAt,
+        recommendationCount: item.recommendationCount + 1
+      })),
+      generatedAt: recommendedAt,
+      schedule: { time: autoCollectTime, timezone: autoCollectTimezone }
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleToday(req, res) {
+  return handleTodayRecommendations(req, res);
+}
+
+async function handleDecision(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const decision = cleanString(body.decision);
+    const rows = await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(decisionPatch(decision))
+    });
+    if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+    sendJson(res, 200, { item: rows[0], decision });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleBulkDecision(req, res) {
+  try {
+    const body = await readBody(req);
+    const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(cleanString).filter(Boolean))] : [];
+    const decision = cleanString(body.decision);
+    if (!ids.length || ids.length > 50) throw new AppError("ids must contain between 1 and 50 items.", 400, "INVALID_INPUT");
+    if (decision === "post_today") throw new AppError("Bulk Post Today is not supported.", 400, "INVALID_INPUT");
+    const encodedIds = ids.map((id) => encodeURIComponent(id)).join(",");
+    const rows = await supabaseRequest(`curation_items?id=in.(${encodedIds})`, {
+      method: "PATCH",
+      body: JSON.stringify(decisionPatch(decision))
+    });
+    sendJson(res, 200, { items: rows || [], updated: rows?.length || 0, decision });
   } catch (error) {
     sendError(res, error);
   }
@@ -999,7 +1100,10 @@ async function handleSaveDailyFind(req, res) {
         item_type: "daily_find",
         content_item_id: contentItem.id,
         ai_analysis_id: analysis?.id || null,
-        status: cleanString(brief.suggestedStatus, "Candidate"),
+        status: "Candidate",
+        human_decision: "saved_candidate",
+        human_saved: true,
+        human_saved_at: new Date().toISOString(),
         editor_note: cleanString(brief.editorNote || brief.angle)
       })
     });
@@ -1038,6 +1142,9 @@ async function handleSaveKevinFind(req, res) {
         item_type: "kevin_found",
         kevin_find_id: kevinFind.id,
         status: "Candidate",
+        human_decision: "saved_candidate",
+        human_saved: true,
+        human_saved_at: new Date().toISOString(),
         editor_note: cleanString(body.whySaved || body.notes)
       })
     });
@@ -1422,8 +1529,12 @@ function requestHandler(req, res) {
     handleListBoard(req, res);
     return;
   }
-  if (req.method === "GET" && pathname === "/api/today") {
-    handleToday(req, res);
+  if (req.method === "GET" && (pathname === "/api/today" || pathname === "/api/recommendations/today")) {
+    handleTodayRecommendations(req, res);
+    return;
+  }
+  if (req.method === "PATCH" && pathname === "/api/curation-items/bulk-decision") {
+    handleBulkDecision(req, res);
     return;
   }
   if (req.method === "GET" && pathname === "/api/sources") {
@@ -1467,6 +1578,11 @@ function requestHandler(req, res) {
   }
   if (sourceMatch && req.method === "DELETE") {
     handleDeleteSource(req, res, sourceMatch[1]);
+    return;
+  }
+  const boardDecisionMatch = pathname.match(/^\/api\/curation-items\/([^/]+)\/decision$/);
+  if (boardDecisionMatch && req.method === "PATCH") {
+    handleDecision(req, res, boardDecisionMatch[1]);
     return;
   }
   const boardItemMatch = pathname.match(/^\/api\/curation-items\/([^/]+)$/);

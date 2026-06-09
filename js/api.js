@@ -86,7 +86,21 @@ export function importRssFeed(payload) {
 }
 
 export async function loadToday() {
-  return appRequest("/api/today", { method: "GET" }, "Today API failed.");
+  return appRequest("/api/recommendations/today", { method: "GET" }, "Today recommendations API failed.");
+}
+
+export function updateCurationDecision(id, decision) {
+  return appRequest(`/api/curation-items/${encodeURIComponent(id)}/decision`, {
+    method: "PATCH",
+    body: JSON.stringify({ decision })
+  }, "Curation decision update failed.");
+}
+
+export function updateBulkCurationDecision(ids, decision) {
+  return appRequest("/api/curation-items/bulk-decision", {
+    method: "PATCH",
+    body: JSON.stringify({ ids, decision })
+  }, "Bulk curation decision update failed.");
 }
 
 export async function loadSources() {

@@ -160,3 +160,35 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .action-toast.visible{opacity:1;transform:translateY(0)}
 .action-toast[data-tone="error"]{background:#fff7f4;color:#713725;border-color:var(--clay)}
 @media(max-width:600px){.action-toast{right:16px;bottom:16px}}
+
+
+.compact-head{align-items:center;margin:14px 0 4px;padding-top:14px;border-top:1px solid var(--line)}
+.compact-head h2{font-size:28px}
+.compact-head .kicker{margin-bottom:5px}
+.operations-list,.draft-list{display:grid;gap:9px}
+.operation-run,.kevin-find-row,.draft-row{border:1px solid var(--line);border-radius:7px;background:#fff;padding:13px}
+.operation-head,.kevin-find-row,.draft-row{display:flex;justify-content:space-between;align-items:start;gap:14px}
+.operation-head strong,.draft-title{font-family:Georgia,serif;font-size:18px;font-weight:400;line-height:1.2}
+.operation-head p{margin-top:4px;font-size:11px;color:var(--muted)}
+.operation-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:12px}
+.operation-summary span{padding:8px;background:var(--soft);border-radius:4px;font-size:10px;color:var(--muted)}
+.operation-summary strong{display:block;margin-top:2px;font-family:Georgia,serif;font-size:17px;color:var(--ink)}
+.operation-run details{margin-top:10px;border-top:1px solid var(--line);padding-top:9px}
+.operation-run summary{cursor:pointer;font-size:11px;color:var(--muted)}
+.operation-sources{display:grid;gap:5px;margin-top:8px}
+.operation-source{display:flex;justify-content:space-between;gap:12px;padding:7px 8px;background:var(--paper);font-size:11px;color:var(--muted)}
+.operation-source span:first-child{color:var(--ink);font-weight:600}
+.field-row,.archive-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,.45fr);gap:10px}
+.archive-toolbar{grid-template-columns:minmax(0,1fr) 180px}
+.kevin-find-row>div:first-child,.draft-row>div:first-child{min-width:0}
+.kevin-note{margin-top:8px;font-size:12px;line-height:1.6;color:var(--muted);word-break:keep-all}
+.draft-row{align-items:center}
+.draft-row.active{border-color:var(--moss);box-shadow:inset 3px 0 0 var(--moss)}
+.draft-row .archive-meta{margin-top:5px}
+@media(max-width:640px){
+  .operation-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .operation-source,.kevin-find-row,.draft-row{align-items:stretch;flex-direction:column}
+  .operation-source{display:grid}
+  .field-row,.archive-toolbar{grid-template-columns:1fr}
+  .kevin-find-row .archive-actions,.draft-row .archive-actions{justify-content:flex-start}
+}

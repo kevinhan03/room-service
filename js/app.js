@@ -1,4 +1,4 @@
-import { createDeck, createResearch, createSource, deleteArchiveItem, deleteSource, fetchArchiveItem, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateSource } from "./api.js";
+import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource } from "./api.js";
 import { $, $$, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
@@ -8,6 +8,9 @@ let currentCurationItemId = null;
 let currentSourceType = "daily_find";
 let currentTodayItems = [];
 const selectedRecommendationIds = new Set();
+let currentDraftId = null;
+let draftAutoSaveTimer = null;
+let currentKevinFinds = [];
 
 function buildBrief() {
   const name = $("#placeName").value.trim() || "Untitled Space";
@@ -312,7 +315,7 @@ async function buildDeck() {
     }
     if (result.caption) $("#captionText").textContent = result.caption;
     try {
-      await insertPostDraft({
+      const savedDraft = await insertPostDraft({
         curationItemId: currentCurationItemId,
         title,
         category: currentBrief?.category || "",
@@ -324,9 +327,15 @@ async function buildDeck() {
         sourceNote: result.sourceNote || "",
         imageCredit: currentBrief?.imageCredit || "",
         imageUsageStatus: currentBrief?.imageUsageStatus || "unknown",
-        editorNote: angle
+        editorNote: angle,
+        format: currentFormat,
+        hook
       });
+      currentDraftId = savedDraft?.draft?.id || null;
+      $("#draftStatus").value = savedDraft?.draft?.status || "Draft";
+      $("#draftSaveStatus").textContent = currentDraftId ? "저장됨" : "새 Draft";
       $("#exportStatus").textContent = "Post draft를 저장했습니다.";
+      await renderDrafts();
     } catch (saveError) {
       console.error(saveError);
       $("#exportStatus").textContent = `Post draft 저장 실패: ${saveError.message}`;
@@ -346,8 +355,13 @@ function switchTab(tab) {
   $(`#section-${tab}`).classList.add("active");
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (tab === "today") renderToday();
-  if (tab === "sources") renderSources();
+  if (tab === "sources") {
+    renderSources();
+    renderCollectionRuns();
+  }
+  if (tab === "kevin") renderKevinArchive();
   if (tab === "board") renderArchive();
+  if (tab === "builder") renderDrafts();
 }
 
 async function generateResearch() {
@@ -468,11 +482,25 @@ async function saveResearch() {
   }
 }
 
+function resetKevinForm() {
+  $("#kevinEditingId").value = "";
+  $("#kevinName").value = "";
+  $("#kevinLocation").value = "";
+  $("#kevinVisitedAt").value = "";
+  $("#kevinRating").value = "";
+  $("#kevinWhySaved").value = "";
+  $("#saveKevinFind").textContent = "새 항목 저장";
+  $("#cancelKevinEdit").hidden = true;
+}
+
 async function saveKevinFind() {
   const button = $("#saveKevinFind");
+  const id = $("#kevinEditingId").value;
   const name = $("#kevinName").value.trim();
   const category = $("#kevinCategory").value;
   const location = $("#kevinLocation").value.trim();
+  const visitedAt = $("#kevinVisitedAt").value;
+  const rating = $("#kevinRating").value;
   const whySaved = $("#kevinWhySaved").value.trim();
   if (!name) {
     $("#kevinStatus").textContent = "이름을 입력해 주세요.";
@@ -481,28 +509,308 @@ async function saveKevinFind() {
   $("#kevinStatus").textContent = "저장 중...";
   setBusy(button, true, "저장 중...");
   try {
-    const saved = await insertKevinFind({ name, category, location, whySaved, notes: whySaved, imageUsageStatus: "owned" });
-    currentCurationItemId = saved?.id || null;
-    currentSourceType = "kevin_found";
-    showBrief({
-      id: saved?.id || Date.now(),
-      curationItemId: saved?.id,
-      itemType: "kevin_found",
-      name,
-      category,
-      sourceName: location || "Kevin Found",
-      notes: whySaved,
-      angle: whySaved,
-      imageUsageStatus: "owned",
-      createdAt: new Date().toLocaleString("ko-KR")
-    });
-    $("#createTitle").value = name;
-    $("#editorialAngle").value = whySaved;
-    $("#kevinStatus").textContent = "Board에 저장했습니다.";
-    renderArchive();
+    const payload = { name, category, location, visitedAt, rating, whySaved, notes: whySaved, imageUsageStatus: "owned" };
+    if (id) {
+      await updateKevinFind(id, payload);
+      $("#kevinStatus").textContent = "Kevin Archive 항목을 수정했습니다.";
+    } else {
+      const saved = await insertKevinFind(payload);
+      currentCurationItemId = saved?.id || null;
+      currentSourceType = "kevin_found";
+      showBrief({
+        id: saved?.id || Date.now(),
+        curationItemId: saved?.id,
+        itemType: "kevin_found",
+        name,
+        category,
+        sourceName: location || "Kevin Found",
+        notes: whySaved,
+        angle: whySaved,
+        imageUsageStatus: "owned",
+        createdAt: new Date().toLocaleString("ko-KR")
+      });
+      $("#createTitle").value = name;
+      $("#editorialAngle").value = whySaved;
+      $("#kevinStatus").textContent = "Board와 Kevin Archive에 저장했습니다.";
+    }
+    resetKevinForm();
+    await Promise.all([renderKevinArchive(), renderArchive()]);
   } catch (error) {
     console.error(error);
     $("#kevinStatus").textContent = `저장에 실패했습니다. ${error.message}`;
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function formatDateTime(value) {
+  if (!value) return "기록 없음";
+  return new Date(value).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function renderCollectionRuns() {
+  const target = $("#collectionRuns");
+  if (!target) return;
+  target.innerHTML = '<div class="empty">수집 기록을 불러오는 중...</div>';
+  try {
+    const runs = await loadCollectionRuns();
+    if (!runs.length) {
+      target.innerHTML = '<div class="empty">아직 자동 수집 기록이 없습니다.</div>';
+      return;
+    }
+    target.innerHTML = runs.map((run) => {
+      const sourceRuns = [...(run.source_collection_runs || [])]
+        .sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)))
+        .map((item) => `<div class="operation-source"><span>${safeText(item.source_name || "Source")}</span><span>${safeText(item.status || "unknown")} · 신규 ${Number(item.imported_count || 0)} · 실패 ${Number(item.failed_count || 0)}</span></div>`)
+        .join("");
+      return `<article class="operation-run">
+        <div class="operation-head"><div><strong>${safeText(["vercel-cron", "schedule", "startup-catchup"].includes(run.trigger) ? "Daily 07:00" : "Manual collection")}</strong><p>${formatDateTime(run.started_at)}</p></div><span class="status-badge ${run.status === "completed" ? "saved" : run.status === "failed" ? "rejected" : "dig-more"}">${safeText(run.status || "running")}</span></div>
+        <div class="operation-summary"><span>Sources <strong>${Number(run.source_count || 0)}</strong></span><span>Imported <strong>${Number(run.imported_count || 0)}</strong></span><span>Skipped <strong>${Number(run.skipped_count || 0)}</strong></span><span>Failed <strong>${Number(run.failed_count || 0)}</strong></span></div>
+        ${sourceRuns ? `<details><summary>소스별 결과</summary><div class="operation-sources">${sourceRuns}</div></details>` : ""}
+      </article>`;
+    }).join("");
+  } catch (error) {
+    target.innerHTML = `<div class="empty">수집 기록을 불러오지 못했습니다. ${safeText(error.message)}</div>`;
+  }
+}
+
+function draftCards() {
+  return currentDeck.map(([title, copy]) => ({ title, copy }));
+}
+
+function draftPayload() {
+  return {
+    title: $("#createTitle").value.trim() || "Untitled Find",
+    category: currentBrief?.category || "",
+    status: $("#draftStatus").value,
+    format: currentFormat,
+    hook: $("#hookLine").value.trim(),
+    caption: $("#captionText").textContent,
+    editorNote: $("#editorialAngle").value.trim(),
+    cards: draftCards()
+  };
+}
+
+function scheduleDraftSave() {
+  if (!currentDraftId || currentDeck.length !== 7) return;
+  clearTimeout(draftAutoSaveTimer);
+  $("#draftSaveStatus").textContent = "변경됨";
+  draftAutoSaveTimer = setTimeout(() => saveCurrentDraft(true), 900);
+}
+
+async function saveCurrentDraft(silent = false) {
+  const button = $("#saveDraft");
+  if (!currentDraftId) {
+    if (!silent) showToast("먼저 Create Post로 새 Draft를 만들어 주세요.", "error");
+    return;
+  }
+  if (!silent) setBusy(button, true, "저장 중...");
+  $("#draftSaveStatus").textContent = "저장 중...";
+  try {
+    await updatePostDraft(currentDraftId, draftPayload());
+    $("#draftSaveStatus").textContent = `저장됨 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`;
+    if (!silent) {
+      showToast("Draft를 저장했습니다.");
+      await renderDrafts();
+    }
+  } catch (error) {
+    console.error(error);
+    $("#draftSaveStatus").textContent = "저장 실패";
+    if (!silent) showToast(actionErrorMessage(error), "error");
+  } finally {
+    if (!silent) setBusy(button, false);
+  }
+}
+
+function renderDraftRows(drafts) {
+  const target = $("#draftList");
+  if (!drafts.length) {
+    target.innerHTML = '<div class="empty">저장된 Draft가 없습니다. Create Post로 첫 초안을 만드세요.</div>';
+    return;
+  }
+  target.innerHTML = drafts.map((draft) => `<article class="draft-row ${draft.id === currentDraftId ? "active" : ""}">
+    <div><p class="draft-title">${safeText(draft.title || "Untitled Find")}</p><p class="archive-meta">${safeText(draft.format || "Check-in")} · ${safeText(draft.status || "Draft")} · ${formatDateTime(draft.updated_at)}</p></div>
+    <div class="archive-actions"><button class="mini-btn" data-open-draft="${safeText(draft.id)}" type="button">열기</button><button class="mini-btn danger" data-delete-draft="${safeText(draft.id)}" type="button">삭제</button></div>
+  </article>`).join("");
+}
+
+async function renderDrafts() {
+  const target = $("#draftList");
+  if (!target) return;
+  try {
+    renderDraftRows(await loadPostDrafts());
+  } catch (error) {
+    target.innerHTML = `<div class="empty">Draft를 불러오지 못했습니다. ${safeText(error.message)}</div>`;
+  }
+}
+
+async function openDraft(id) {
+  try {
+    const draft = await fetchPostDraft(id);
+    currentDraftId = draft.id;
+    currentDeck = [...(draft.post_slides || [])]
+      .sort((a, b) => Number(a.slide_index) - Number(b.slide_index))
+      .map((slide) => [slide.title || slide.slide_type, slide.body || ""]);
+    $("#createTitle").value = draft.title || "";
+    $("#editorialAngle").value = draft.editor_note || "";
+    $("#hookLine").value = draft.hook || currentDeck[0]?.[1] || "";
+    $("#draftStatus").value = draft.status || "Draft";
+    $("#captionText").textContent = draft.caption || "";
+    currentFormat = draft.format || "Check-in";
+    $("#formatPills .pill").forEach((pill) => pill.classList.toggle("active", pill.dataset.format === currentFormat));
+    $("#previewFormat").textContent = currentFormat;
+    $("#previewTitle").textContent = draft.title || "dig.everyday";
+    $("#previewHook").textContent = draft.hook || currentDeck[0]?.[1] || "";
+    $("#draftSaveStatus").textContent = "저장된 Draft";
+    syncDeck();
+    renderDrafts();
+  } catch (error) {
+    showToast(actionErrorMessage(error), "error");
+  }
+}
+
+async function removeDraft(id) {
+  if (!window.confirm("이 Draft를 삭제할까요?")) return;
+  try {
+    await deletePostDraft(id);
+    if (currentDraftId === id) {
+      currentDraftId = null;
+      $("#draftSaveStatus").textContent = "새 Draft";
+    }
+    showToast("Draft를 삭제했습니다.");
+    await renderDrafts();
+  } catch (error) {
+    showToast(actionErrorMessage(error), "error");
+  }
+}
+
+async function renderKevinArchive() {
+  const target = $("#kevinArchiveList");
+  if (!target) return;
+  target.innerHTML = '<div class="empty">Kevin Archive를 불러오는 중...</div>';
+  try {
+    currentKevinFinds = await loadKevinFinds($("#kevinSearch").value.trim(), $("#kevinFilter").value);
+    if (!currentKevinFinds.length) {
+      target.innerHTML = '<div class="empty">조건에 맞는 Kevin Found가 없습니다.</div>';
+      return;
+    }
+    target.innerHTML = currentKevinFinds.map((item) => `<article class="kevin-find-row">
+      <div><div class="badge-row"><span class="status-badge saved">${safeText(item.category || "Find")}</span>${item.rating ? `<span class="status-badge muted">★ ${Number(item.rating)}</span>` : ""}</div><p class="draft-title">${safeText(item.name)}</p><p class="archive-meta">${safeText(item.location || "위치 없음")} · ${safeText(item.visited_at || "날짜 없음")}</p><p class="kevin-note">${safeText(item.why_saved || item.notes || "")}</p></div>
+      <div class="archive-actions"><button class="mini-btn" data-edit-kevin="${safeText(item.id)}" type="button">수정</button><button class="mini-btn danger" data-delete-kevin="${safeText(item.id)}" type="button">삭제</button></div>
+    </article>`).join("");
+  } catch (error) {
+    target.innerHTML = `<div class="empty">Kevin Archive를 불러오지 못했습니다. ${safeText(error.message)}</div>`;
+  }
+}
+
+function editKevinFind(id) {
+  const item = currentKevinFinds.find((find) => find.id === id);
+  if (!item) return;
+  $("#kevinEditingId").value = item.id;
+  $("#kevinName").value = item.name || "";
+  $("#kevinCategory").value = item.category || "Object";
+  $("#kevinLocation").value = item.location || "";
+  $("#kevinVisitedAt").value = item.visited_at || "";
+  $("#kevinRating").value = item.rating || "";
+  $("#kevinWhySaved").value = item.why_saved || item.notes || "";
+  $("#saveKevinFind").textContent = "수정 저장";
+  $("#cancelKevinEdit").hidden = false;
+  $("#kevinName").focus();
+}
+
+async function removeKevinFind(id) {
+  if (!window.confirm("이 Kevin Found를 삭제할까요?")) return;
+  try {
+    await deleteKevinFind(id);
+    showToast("Kevin Archive에서 삭제했습니다.");
+    await renderKevinArchive();
+  } catch (error) {
+    showToast(actionErrorMessage(error), "error");
+  }
+}
+
+function wrapCanvasText(context, text, maxWidth) {
+  const paragraphs = String(text || "").split(/\n+/);
+  const lines = [];
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let line = "";
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width <= maxWidth || !line) line = candidate;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    });
+    if (line) lines.push(line);
+    if (paragraphIndex < paragraphs.length - 1) lines.push("");
+  });
+  return lines;
+}
+
+function drawSlidePng(card, index) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext("2d");
+  const isCover = index === 0;
+  context.fillStyle = isCover ? "#2c2c2a" : "#f1efe8";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = isCover ? "#ba7517" : "#667b68";
+  context.fillRect(isCover ? 92 : 86, isCover ? 770 : 112, isCover ? 5 : 70, isCover ? 70 : 5);
+  context.textBaseline = "top";
+  context.letterSpacing = "0px";
+  context.fillStyle = isCover ? "#888780" : "#686a64";
+  context.font = "24px Arial, sans-serif";
+  context.fillText(isCover ? currentFormat.toUpperCase() : `${String(index + 1).padStart(2, "0")} / 07`, 86, isCover ? 110 : 154);
+  context.fillStyle = isCover ? "#f1efe8" : "#2c2c2a";
+  context.font = isCover ? "72px Georgia, serif" : "64px Georgia, serif";
+  const titleLines = wrapCanvasText(context, card[0], 880).slice(0, 4);
+  let titleY = isCover ? 865 : 260;
+  titleLines.forEach((line) => {
+    context.fillText(line, 86, titleY);
+    titleY += isCover ? 78 : 72;
+  });
+  context.fillStyle = isCover ? "rgba(241,239,232,.78)" : "#3f403d";
+  context.font = isCover ? "32px Arial, sans-serif" : "34px Arial, sans-serif";
+  const copyLines = wrapCanvasText(context, card[1], 880).slice(0, isCover ? 5 : 13);
+  let copyY = titleY + (isCover ? 34 : 72);
+  copyLines.forEach((line) => {
+    context.fillText(line, 86, copyY);
+    copyY += isCover ? 47 : 54;
+  });
+  context.fillStyle = isCover ? "#d3d1c7" : "#888780";
+  context.font = "24px Georgia, serif";
+  context.fillText("dig.everyday", 86, 1260);
+  return canvas;
+}
+
+async function downloadPngPack() {
+  if (currentDeck.length !== 7) {
+    showToast("먼저 7장 Draft를 생성해 주세요.", "error");
+    return;
+  }
+  const button = $("#downloadPngPack");
+  setBusy(button, true, "렌더링 중...");
+  try {
+    const slug = (topic() || "dig-everyday").toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-").replace(/^-|-$/g, "");
+    for (let index = 0; index < currentDeck.length; index += 1) {
+      const canvas = drawSlidePng(currentDeck[index], index);
+      const url = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slug || "dig-everyday"}-${String(index + 1).padStart(2, "0")}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+    $("#exportStatus").textContent = "1080×1350 PNG 7장을 다운로드했습니다.";
+    showToast("PNG 7장을 준비했습니다.");
+  } catch (error) {
+    $("#exportStatus").textContent = `PNG 생성 실패: ${error.message}`;
+    showToast("PNG 생성에 실패했습니다.", "error");
   } finally {
     setBusy(button, false);
   }
@@ -514,9 +822,22 @@ function bindEvents() {
   $("#generateResearch").addEventListener("click", generateResearch);
   $("#saveResearch").addEventListener("click", saveResearch);
   $("#saveKevinFind")?.addEventListener("click", saveKevinFind);
+  $("#cancelKevinEdit")?.addEventListener("click", resetKevinForm);
+  $("#kevinSearch")?.addEventListener("input", () => {
+    clearTimeout(window.kevinSearchTimer);
+    window.kevinSearchTimer = setTimeout(renderKevinArchive, 250);
+  });
+  $("#kevinFilter")?.addEventListener("change", renderKevinArchive);
+  $("#kevinArchiveList")?.addEventListener("click", async (event) => {
+    const edit = event.target.closest("[data-edit-kevin]");
+    const del = event.target.closest("[data-delete-kevin]");
+    if (edit) editKevinFind(edit.dataset.editKevin);
+    if (del) await removeKevinFind(del.dataset.deleteKevin);
+  });
   $("#importRss")?.addEventListener("click", importRss);
   $("#saveSource")?.addEventListener("click", saveAutomaticSource);
   $("#runAllSources")?.addEventListener("click", collectAllSourcesNow);
+  $("#refreshRuns")?.addEventListener("click", renderCollectionRuns);
   $("#closeSourceWarning")?.addEventListener("click", () => $("#sourceWarningDialog")?.close());
   $("#sourceWarningDialog")?.addEventListener("click", (event) => {
     if (event.target === $("#sourceWarningDialog")) $("#sourceWarningDialog").close();
@@ -574,6 +895,7 @@ function bindEvents() {
     if (copyField) currentDeck[index][1] = field.value;
     renderDeckList(currentDeck);
     renderPreviewDeck(currentDeck, currentFormat, topic());
+    scheduleDraftSave();
   });
   $("#previewDeck").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-copy-card]");
@@ -597,8 +919,25 @@ function bindEvents() {
     pill.classList.add("active");
     $("#previewFormat").textContent = currentFormat;
     renderPreviewDeck(currentDeck, currentFormat, topic());
+    scheduleDraftSave();
   });
   $("#generateDeck").addEventListener("click", buildDeck);
+  $("#saveDraft")?.addEventListener("click", () => saveCurrentDraft(false));
+  $("#refreshDrafts")?.addEventListener("click", renderDrafts);
+  $("#draftList")?.addEventListener("click", async (event) => {
+    const open = event.target.closest("[data-open-draft]");
+    const del = event.target.closest("[data-delete-draft]");
+    if (open) await openDraft(open.dataset.openDraft);
+    if (del) await removeDraft(del.dataset.deleteDraft);
+  });
+  ["createTitle", "editorialAngle", "hookLine"].forEach((id) => $("#" + id)?.addEventListener("input", () => {
+    $("#previewTitle").textContent = $("#createTitle").value.trim() || "dig.everyday";
+    $("#previewHook").textContent = $("#hookLine").value.trim() || currentDeck[0]?.[1] || "";
+    renderPreviewDeck(currentDeck, currentFormat, topic());
+    scheduleDraftSave();
+  }));
+  $("#draftStatus")?.addEventListener("change", scheduleDraftSave);
+  $("#downloadPngPack")?.addEventListener("click", downloadPngPack);
   $("#copyCaption").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText($("#captionText").textContent);
@@ -612,5 +951,8 @@ function bindEvents() {
 bindEvents();
 renderToday();
 renderSources();
+renderCollectionRuns();
+renderKevinArchive();
 renderArchive();
+renderDrafts();
 buildFallbackDeck();

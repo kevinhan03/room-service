@@ -139,3 +139,48 @@ export function updateCurationStatus(id, status) {
     body: JSON.stringify({ status })
   }, "Curation status update failed.");
 }
+
+export async function loadCollectionRuns() {
+  const data = await appRequest("/api/collection-runs", { method: "GET" }, "Collection runs API failed.");
+  return data.runs || [];
+}
+
+export async function loadPostDrafts() {
+  const data = await appRequest("/api/post-drafts", { method: "GET" }, "Post drafts API failed.");
+  return data.drafts || [];
+}
+
+export async function fetchPostDraft(id) {
+  const data = await appRequest(`/api/post-drafts/${encodeURIComponent(id)}`, { method: "GET" }, "Post draft API failed.");
+  return data.draft;
+}
+
+export function updatePostDraft(id, payload) {
+  return appRequest(`/api/post-drafts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  }, "Post draft update failed.");
+}
+
+export function deletePostDraft(id) {
+  return appRequest(`/api/post-drafts/${encodeURIComponent(id)}`, { method: "DELETE" }, "Post draft delete failed.");
+}
+
+export async function loadKevinFinds(search = "", category = "All") {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (category && category !== "All") params.set("category", category);
+  const data = await appRequest(`/api/kevin-finds?${params.toString()}`, { method: "GET" }, "Kevin Archive API failed.");
+  return data.finds || [];
+}
+
+export function updateKevinFind(id, payload) {
+  return appRequest(`/api/kevin-finds/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  }, "Kevin Find update failed.");
+}
+
+export function deleteKevinFind(id) {
+  return appRequest(`/api/kevin-finds/${encodeURIComponent(id)}`, { method: "DELETE" }, "Kevin Find delete failed.");
+}

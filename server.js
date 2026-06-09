@@ -390,7 +390,7 @@ function normalizeBoardRow(row) {
     visualScore: analysis?.visual_score ?? null,
     storyScore: analysis?.story_score ?? null,
     verification: analysis?.verification_needed || "",
-    imageUrl: source.image_url || "",
+    imageUrl: normalizeExternalUrl(source.image_url || "", source.url || ""),
     imageCredit: source.image_credit || "",
     imageUsageStatus: source.image_usage_status || "unknown",
     createdAtLabel: row.created_at ? new Date(row.created_at).toLocaleString("ko-KR") : ""
@@ -427,8 +427,25 @@ function decodeXml(value) {
     .replace(/&#39;/g, "'");
 }
 
+function decodeXmlDeep(value) {
+  let decoded = cleanString(value);
+  for (let index = 0; index < 3; index += 1) {
+    const next = decodeXml(decoded);
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
+}
+
+function normalizeExternalUrl(value, baseUrl = "") {
+  const decoded = decodeXmlDeep(value);
+  const nestedHttpIndex = decoded.indexOf("https://", decoded.startsWith("https://") ? 8 : 0);
+  const candidate = nestedHttpIndex > 0 ? decoded.slice(nestedHttpIndex) : decoded;
+  return absolutizeUrl(candidate, baseUrl);
+}
+
 function stripHtml(value) {
-  return decodeXml(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return decodeXmlDeep(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function firstTag(xml, tag) {
@@ -448,7 +465,7 @@ function parseFeedDate(value) {
 
 function absolutizeUrl(value, baseUrl) {
   try {
-    return new URL(value, baseUrl).toString();
+    return new URL(decodeXmlDeep(value), baseUrl).toString();
   } catch {
     return cleanString(value);
   }
@@ -686,7 +703,7 @@ async function fetchArticleMetadata(url, fallbackTitle) {
     if (!response.ok) return { title: fallbackTitle, url, rawExcerpt: "", imageUrl: "", publishedAt: null };
     const title = stripHtml(metaContent(html, "property", "og:title") || firstTag(html, "title") || fallbackTitle);
     const description = stripHtml(metaContent(html, "property", "og:description") || metaContent(html, "name", "description"));
-    const imageUrl = absolutizeUrl(metaContent(html, "property", "og:image"), url);
+    const imageUrl = normalizeExternalUrl(metaContent(html, "property", "og:image"), url);
     const publishedAt = parseFeedDate(metaContent(html, "property", "article:published_time") || metaContent(html, "name", "date"));
     return { title, url, rawExcerpt: description.slice(0, 1200), imageUrl, publishedAt };
   } catch {
@@ -817,23 +834,77 @@ async function listActiveSources() {
 async function runAllSources(trigger = "manual") {
   if (collectionRunning) return { trigger, running: true, sources: 0, imported: 0, skipped: 0, failed: 0, results: [] };
   collectionRunning = true;
+  let run = null;
   try {
+    const runRows = await supabaseRequest("collection_runs", {
+      method: "POST",
+      body: JSON.stringify({ trigger, status: "running" })
+    });
+    run = runRows?.[0] || null;
     const sources = await listActiveSources();
-    const summary = { trigger, running: false, sources: sources.length, imported: 0, skipped: 0, failed: 0, results: [] };
+    const summary = { runId: run?.id || null, trigger, running: false, sources: sources.length, imported: 0, skipped: 0, failed: 0, results: [] };
     for (const source of sources) {
+      const sourceStartedAt = new Date().toISOString();
       try {
         const result = await collectSource(source, autoCollectLimit);
         summary.results.push(result);
         summary.imported += result.imported;
         summary.skipped += result.skipped;
         summary.failed += result.failed;
+        await supabaseRequest("source_collection_runs", {
+          method: "POST",
+          body: JSON.stringify({
+            run_id: run?.id,
+            source_id: source.id,
+            source_name: source.name,
+            status: result.failed ? "partial" : "completed",
+            imported_count: result.imported,
+            skipped_count: result.skipped,
+            failed_count: result.failed,
+            started_at: sourceStartedAt
+          })
+        });
       } catch (error) {
         summary.failed += 1;
         summary.results.push({ source, imported: 0, skipped: 0, failed: 1, items: [], error: error.message });
+        await supabaseRequest("source_collection_runs", {
+          method: "POST",
+          body: JSON.stringify({
+            run_id: run?.id,
+            source_id: source.id,
+            source_name: source.name,
+            status: "failed",
+            failed_count: 1,
+            error_message: error.message,
+            started_at: sourceStartedAt
+          })
+        });
         log("error", "source collection failed", { sourceId: source.id, sourceName: source.name, trigger, details: error.message });
       }
     }
+    const status = summary.failed === 0 ? "completed" : summary.imported > 0 || summary.skipped > 0 ? "partial" : "failed";
+    if (run?.id) {
+      await supabaseRequest(`collection_runs?id=eq.${encodeURIComponent(run.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status,
+          source_count: summary.sources,
+          imported_count: summary.imported,
+          skipped_count: summary.skipped,
+          failed_count: summary.failed,
+          completed_at: new Date().toISOString()
+        })
+      });
+    }
     return summary;
+  } catch (error) {
+    if (run?.id) {
+      await supabaseRequest(`collection_runs?id=eq.${encodeURIComponent(run.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "failed", error_message: error.message, completed_at: new Date().toISOString() })
+      }).catch(() => {});
+    }
+    throw error;
   } finally {
     collectionRunning = false;
   }
@@ -962,6 +1033,15 @@ function startCollectionScheduler() {
   runStartupCatchup().catch((error) => log("error", "scheduler startup check failed", { details: error.message }));
 }
 
+async function handleCollectionRuns(req, res) {
+  try {
+    const rows = await supabaseRequest("collection_runs?select=*,source_collection_runs(*)&order=started_at.desc&limit=20", { method: "GET", headers: { Prefer: "" } });
+    sendJson(res, 200, { runs: rows || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
 async function handleListBoard(req, res) {
   try {
     const rows = await supabaseRequest("curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&order=updated_at.desc&limit=80", { method: "GET", headers: { Prefer: "" } });
@@ -973,6 +1053,21 @@ async function handleListBoard(req, res) {
 
 async function handleTodayRecommendations(req, res) {
   try {
+    const recommendationDate = getZonedParts().date;
+    const existing = await supabaseRequest(`recommendation_snapshots?select=*,recommendation_snapshot_items(*,curation_items(*,content_items(*),kevin_finds(*),ai_analyses(*)))&recommendation_date=eq.${recommendationDate}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    if (existing?.[0]) {
+      const snapshot = existing[0];
+      if (Number(snapshot.item_count || 0) > 0) {
+        const items = (snapshot.recommendation_snapshot_items || [])
+          .sort((a, b) => a.rank - b.rank)
+          .map((entry) => ({ ...normalizeBoardRow(entry.curation_items), finalScore: Number(entry.final_score), rank: entry.rank }))
+          .filter((item) => item.status === "Candidate" && item.humanDecision !== "rejected");
+        sendJson(res, 200, { items, snapshotId: snapshot.id, generatedAt: snapshot.generated_at, isSnapshot: true, schedule: { time: autoCollectTime, timezone: autoCollectTimezone } });
+        return;
+      }
+      await supabaseRequest(`recommendation_snapshots?id=eq.${encodeURIComponent(snapshot.id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    }
+
     const rows = await supabaseRequest("curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&status=eq.Candidate&human_decision=neq.rejected&order=created_at.desc&limit=100", { method: "GET", headers: { Prefer: "" } });
     const now = Date.now();
     const items = (rows || [])
@@ -982,23 +1077,42 @@ async function handleTodayRecommendations(req, res) {
         || b.finalScore - a.finalScore
         || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 10);
-
     const recommendedAt = new Date().toISOString();
-    await Promise.all(items.map((item) => supabaseRequest(`curation_items?id=eq.${encodeURIComponent(item.id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        last_recommended_at: recommendedAt,
-        recommendation_count: item.recommendationCount + 1
-      })
-    })));
-
+    if (!items.length) {
+      sendJson(res, 200, {
+        items: [],
+        snapshotId: null,
+        generatedAt: recommendedAt,
+        isSnapshot: false,
+        schedule: { time: autoCollectTime, timezone: autoCollectTimezone }
+      });
+      return;
+    }
+    const snapshotRows = await supabaseRequest("recommendation_snapshots", {
+      method: "POST",
+      body: JSON.stringify({ recommendation_date: recommendationDate, generated_at: recommendedAt, item_count: items.length })
+    });
+    const snapshot = snapshotRows?.[0];
+    if (snapshot?.id && items.length) {
+      await supabaseRequest("recommendation_snapshot_items", {
+        method: "POST",
+        body: JSON.stringify(items.map((item, index) => ({
+          snapshot_id: snapshot.id,
+          curation_item_id: item.id,
+          rank: index + 1,
+          final_score: item.finalScore
+        })))
+      });
+      await Promise.all(items.map((item) => supabaseRequest(`curation_items?id=eq.${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ last_recommended_at: recommendedAt, recommendation_count: item.recommendationCount + 1 })
+      })));
+    }
     sendJson(res, 200, {
-      items: items.map((item) => ({
-        ...item,
-        lastRecommendedAt: recommendedAt,
-        recommendationCount: item.recommendationCount + 1
-      })),
+      items: items.map((item, index) => ({ ...item, rank: index + 1, lastRecommendedAt: recommendedAt, recommendationCount: item.recommendationCount + 1 })),
+      snapshotId: snapshot?.id || null,
       generatedAt: recommendedAt,
+      isSnapshot: true,
       schedule: { time: autoCollectTime, timezone: autoCollectTimezone }
     });
   } catch (error) {
@@ -1187,6 +1301,8 @@ async function handleSavePostDraft(req, res) {
         category: cleanString(body.category),
         source_type: cleanString(body.sourceType, "daily_find"),
         status: "Draft",
+        format: cleanString(body.format, "Check-in"),
+        hook: cleanString(body.hook),
         image_credit: cleanString(body.imageCredit),
         image_usage_status: cleanString(body.imageUsageStatus, "unknown"),
         caption: cleanString(body.caption),
@@ -1203,12 +1319,122 @@ async function handleSavePostDraft(req, res) {
       body: JSON.stringify(cards.map((card, index) => ({
         post_draft_id: draft.id,
         slide_index: index + 1,
-        slide_type: card.title,
+        slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
         title: card.title,
         body: card.copy
       })))
     });
     sendJson(res, 200, { draft, slides: slideRows || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleListPostDrafts(req, res) {
+  try {
+    const rows = await supabaseRequest("post_drafts?select=*,post_slides(*)&order=updated_at.desc&limit=50", { method: "GET", headers: { Prefer: "" } });
+    sendJson(res, 200, { drafts: rows || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleGetPostDraft(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`post_drafts?select=*,post_slides(*)&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    const draft = rows?.[0];
+    if (!draft) throw new AppError("Post draft not found.", 404, "INVALID_INPUT");
+    await supabaseRequest(`post_drafts?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ last_opened_at: new Date().toISOString() }) });
+    sendJson(res, 200, { draft });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUpdatePostDraft(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const cards = validateCards(body.cards);
+    if (cards.length !== 7) throw new AppError("Post draft must have exactly seven slides.", 400, "INVALID_INPUT");
+    const allowedStatus = new Set(["Draft", "Editing", "Ready to Export", "Exported", "Published"]);
+    const status = cleanString(body.status, "Editing");
+    if (!allowedStatus.has(status)) throw new AppError("Draft status is not supported.", 400, "INVALID_INPUT");
+    const draftRows = await supabaseRequest(`post_drafts?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: cleanString(body.title, "Untitled Find"),
+        category: cleanString(body.category),
+        status,
+        format: cleanString(body.format, "Check-in"),
+        hook: cleanString(body.hook),
+        caption: cleanString(body.caption),
+        editor_note: cleanString(body.editorNote),
+        updated_at: new Date().toISOString()
+      })
+    });
+    await supabaseRequest(`post_slides?post_draft_id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    const slides = await supabaseRequest("post_slides", {
+      method: "POST",
+      body: JSON.stringify(cards.map((card, index) => ({
+        post_draft_id: id,
+        slide_index: index + 1,
+        slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
+        title: card.title,
+        body: card.copy
+      })))
+    });
+    sendJson(res, 200, { draft: draftRows?.[0] || null, slides: slides || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleDeletePostDraft(req, res, id) {
+  try {
+    await supabaseRequest(`post_drafts?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    sendJson(res, 200, { ok: true });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleListKevinFinds(req, res, parsed) {
+  try {
+    const search = cleanString(parsed.searchParams.get("search"));
+    const category = cleanString(parsed.searchParams.get("category"));
+    let query = "kevin_finds?select=*&order=updated_at.desc&limit=100";
+    if (category && category !== "All") query += `&category=eq.${encodeURIComponent(category)}`;
+    const rows = await supabaseRequest(query, { method: "GET", headers: { Prefer: "" } });
+    const finds = search
+      ? (rows || []).filter((item) => [item.name, item.location, item.notes, item.why_saved].some((value) => cleanString(value).toLowerCase().includes(search.toLowerCase())))
+      : rows || [];
+    sendJson(res, 200, { finds });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUpdateKevinFind(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const patch = { updated_at: new Date().toISOString() };
+    ["name", "category", "location", "notes", "why_saved", "image_url", "image_credit", "image_source_url", "image_usage_status"].forEach((key) => {
+      const camel = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      if (body[camel] !== undefined) patch[key] = cleanString(body[camel]);
+    });
+    if (body.visitedAt !== undefined) patch.visited_at = cleanString(body.visitedAt) || null;
+    if (body.rating !== undefined) patch.rating = Number(body.rating) || null;
+    const rows = await supabaseRequest(`kevin_finds?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+    sendJson(res, 200, { find: rows?.[0] || null });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleDeleteKevinFind(req, res, id) {
+  try {
+    await supabaseRequest(`kevin_finds?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    sendJson(res, 200, { ok: true });
   } catch (error) {
     sendError(res, error);
   }
@@ -1525,6 +1751,18 @@ function requestHandler(req, res) {
     handleCreateDeck(req, res);
     return;
   }
+  if (req.method === "GET" && pathname === "/api/collection-runs") {
+    handleCollectionRuns(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/post-drafts") {
+    handleListPostDrafts(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/kevin-finds") {
+    handleListKevinFinds(req, res, parsed);
+    return;
+  }
   if (req.method === "GET" && pathname === "/api/curation-items") {
     handleListBoard(req, res);
     return;
@@ -1564,6 +1802,28 @@ function requestHandler(req, res) {
   }
   if (req.method === "POST" && pathname === "/api/post-drafts") {
     handleSavePostDraft(req, res);
+    return;
+  }
+  const postDraftMatch = pathname.match(/^\/api\/post-drafts\/([^/]+)$/);
+  if (postDraftMatch && req.method === "GET") {
+    handleGetPostDraft(req, res, postDraftMatch[1]);
+    return;
+  }
+  if (postDraftMatch && req.method === "PATCH") {
+    handleUpdatePostDraft(req, res, postDraftMatch[1]);
+    return;
+  }
+  if (postDraftMatch && req.method === "DELETE") {
+    handleDeletePostDraft(req, res, postDraftMatch[1]);
+    return;
+  }
+  const kevinFindMatch = pathname.match(/^\/api\/kevin-finds\/([^/]+)$/);
+  if (kevinFindMatch && req.method === "PATCH") {
+    handleUpdateKevinFind(req, res, kevinFindMatch[1]);
+    return;
+  }
+  if (kevinFindMatch && req.method === "DELETE") {
+    handleDeleteKevinFind(req, res, kevinFindMatch[1]);
     return;
   }
   const sourceRunMatch = pathname.match(/^\/api\/sources\/([^/]+)\/run$/);

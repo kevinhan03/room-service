@@ -87,6 +87,8 @@
           <div class="inline"><button id="saveSource" class="btn" type="button">소스 저장</button><button id="importRss" class="btn secondary" type="button">저장 + 지금 수집</button><button id="runAllSources" class="btn ghost" type="button">전체 지금 수집</button><p id="rssStatus" class="status-line"></p></div>
           <div id="sourceList" class="archive-list"></div>
           <div id="rssResult" class="archive-list"></div>
+          <div class="section-head compact-head"><div><p class="kicker">Collection Monitor</p><h2>Recent Runs</h2></div><button id="refreshRuns" class="mini-btn" type="button">새로고침</button></div>
+          <div id="collectionRuns" class="operations-list"><div class="empty">수집 기록을 불러오는 중...</div></div>
         </div>
       </div>
     </div>
@@ -103,15 +105,18 @@
         <div class="panel span-5 stack">
           <label><span class="label">Name</span><input id="kevinName" class="field" type="text" placeholder="예: 방문한 카페, 산 책, 저장한 오브제"></label>
           <label><span class="label">Category</span><select id="kevinCategory" class="select"><option>Restaurant</option><option>Cafe</option><option>Hotel</option><option>Travel</option><option>Store</option><option>Exhibition</option><option>Perfume</option><option>Object</option><option>Product</option><option>Brand</option><option>Book</option><option>Magazine</option><option>Artwork</option><option>Playlist</option></select></label>
+          <input id="kevinEditingId" type="hidden">
           <label><span class="label">Location / Source</span><input id="kevinLocation" class="field" type="text" placeholder="장소, 구매처, 발견한 맥락"></label>
+          <div class="field-row"><label><span class="label">Visited At</span><input id="kevinVisitedAt" class="field" type="date"></label><label><span class="label">Rating</span><select id="kevinRating" class="select"><option value="">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label></div>
           <label><span class="label">Why Saved</span><textarea id="kevinWhySaved" class="textarea" placeholder="왜 좋았는지, 어떤 분위기였는지, 다시 보고 싶은 이유"></textarea></label>
-          <button id="saveKevinFind" class="btn secondary" type="button">Board 저장</button>
+          <div class="inline"><button id="saveKevinFind" class="btn secondary" type="button">새 항목 저장</button><button id="cancelKevinEdit" class="mini-btn" type="button" hidden>수정 취소</button></div>
           <p id="kevinStatus" class="status-line"></p>
         </div>
-        <div class="panel span-7"><div class="research-output">
-          <div class="insight-card"><p class="insight-title">MVP Scope</p><p class="insight-body">Kevin Found Lite는 수동 등록부터 시작한다. 저장 후 Board에 올리고, 같은 Builder에서 7장 게시물로 전환한다.</p></div>
-          <div class="insight-card"><p class="insight-title">Not Just Places</p><p class="insight-body">Restaurant, Cafe뿐 아니라 Product, Brand, Book, Magazine, Artwork, Playlist까지 저장 가능한 구조로 둔다.</p></div>
-        </div></div>
+        <div class="panel span-7 stack">
+          <div class="section-head compact-head"><div><p class="kicker">Kevin Archive</p><h2>Saved Finds</h2></div></div>
+          <div class="archive-toolbar"><input id="kevinSearch" class="field" type="search" placeholder="이름, 위치, 메모 검색"><select id="kevinFilter" class="select"><option>All</option><option>Restaurant</option><option>Cafe</option><option>Hotel</option><option>Travel</option><option>Store</option><option>Exhibition</option><option>Perfume</option><option>Object</option><option>Product</option><option>Brand</option><option>Book</option><option>Magazine</option><option>Artwork</option><option>Playlist</option></select></div>
+          <div id="kevinArchiveList" class="operations-list"><div class="empty">Archive를 불러오는 중...</div></div>
+        </div>
       </div>
     </div>
   </section>
@@ -124,13 +129,18 @@
     <div class="inner">
       <div class="section-head"><div><p class="kicker">Builder</p><h2>Seven Slide Draft</h2></div><p>Create Post는 7장 카드 문구와 캡션을 한 번에 생성한다.</p></div>
       <div class="grid">
+        <div class="panel span-12 stack">
+          <div class="section-head compact-head"><div><p class="kicker">Draft Library</p><h2>Continue Editing</h2></div><button id="refreshDrafts" class="mini-btn" type="button">새로고침</button></div>
+          <div id="draftList" class="draft-list"><div class="empty">Draft를 불러오는 중...</div></div>
+        </div>
         <div class="panel span-4 stack">
           <label><span class="label">Selected Topic</span><input id="createTitle" class="field" type="text" placeholder="공간 또는 브랜드명"></label>
           <label><span class="label">Editorial Angle</span><textarea id="editorialAngle" class="textarea" placeholder="왜 이 공간이 흥미로운지 짧게 적어주세요."></textarea></label>
           <label><span class="label">Hook Line</span><textarea id="hookLine" class="textarea" placeholder="장을 보러 가는 게 아니다.&#10;보여주러 간다."></textarea></label>
           <div><span class="label">Format</span><div class="pill-list" id="formatPills"><button class="pill active" data-format="Check-in" type="button">Check-in</button><button class="pill" data-format="The Edit" type="button">The Edit</button><button class="pill" data-format="Object" type="button">Object</button><button class="pill" data-format="Portrait" type="button">Portrait</button></div></div>
-          <button id="generateDeck" class="btn" type="button">Create Post</button>
-          <a class="btn ghost" href="room-service-templates.html">템플릿 보기</a>
+          <label><span class="label">Draft Status</span><select id="draftStatus" class="select"><option>Draft</option><option>Editing</option><option>Ready to Export</option><option>Exported</option><option>Published</option></select></label>
+          <div class="inline"><button id="generateDeck" class="btn" type="button">Create Post</button><button id="saveDraft" class="btn secondary" type="button">Draft 저장</button></div>
+          <p id="draftSaveStatus" class="status-line">새 Draft</p>
         </div>
         <div class="panel span-4"><div class="canvas-preview"><div class="canvas-content"><p class="canvas-kicker" id="previewFormat">Check-in</p><h3 class="canvas-title" id="previewTitle">dig.everyday</h3><p class="canvas-hook" id="previewHook">첫 장은 반드시 흥미를 유발한다.</p></div></div></div>
         <div class="panel span-4"><div class="deck-list" id="deckList"></div></div>
@@ -156,7 +166,7 @@
     <div class="inner">
       <div class="section-head"><div><p class="kicker">Export</p><h2>Caption & PNG Pack</h2></div><p>캡션, 크레딧, 이미지 사용 상태를 확인하고 PNG Export를 준비한다.</p></div>
       <div class="grid">
-        <div class="panel span-7"><div class="export-box"><span class="label">Instagram Caption</span><div id="captionText" class="caption">Create Post를 실행하면 캡션이 여기에 준비됩니다.</div><div class="inline"><button id="copyCaption" class="btn secondary" type="button">캡션 복사</button><a class="btn ghost" href="room-service-templates.html">템플릿 메모 확인</a></div></div></div>
+        <div class="panel span-7"><div class="export-box"><span class="label">Instagram Caption</span><div id="captionText" class="caption">Create Post를 실행하면 캡션이 여기에 준비됩니다.</div><div class="inline"><button id="copyCaption" class="btn secondary" type="button">캡션 복사</button><button id="downloadPngPack" class="btn" type="button">PNG 7장 다운로드</button></div></div></div>
         <div class="panel span-5 stack"><span class="label">PNG Export Checklist</span><div class="deck-list"><div class="deck-card"><div class="deck-no">1</div><div><p class="deck-title">Hook</p><p class="deck-copy">첫 장은 설명하지 않는다. 멈추게 한다.</p></div></div><div class="deck-card"><div class="deck-no">2</div><div><p class="deck-title">Facts</p><p class="deck-copy">Origin, Growth, Signature는 확인 가능한 정보로 쓴다.</p></div></div><div class="deck-card"><div class="deck-no">3</div><div><p class="deck-title">Tone</p><p class="deck-copy">짧다. 건조하다. 정보 밀도가 높다.</p></div></div><div class="deck-card"><div class="deck-no">4</div><div><p class="deck-title">Ban</p><p class="deck-copy">마케팅 문구, 과한 수식어, 감탄사는 쓰지 않는다.</p></div></div></div><p id="exportStatus" class="status-line"></p></div>
       </div>
     </div>

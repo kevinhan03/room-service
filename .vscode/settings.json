@@ -1,0 +1,11 @@
+{
+  "explorer.excludeGitIgnore": false,
+  "files.exclude": {
+    "**/.env.local": false,
+    "**/.env*": false,
+    "**/docs": false,
+    "**/supabase": false,
+    "**/js": false,
+    "**/styles.css": false
+  }
+}

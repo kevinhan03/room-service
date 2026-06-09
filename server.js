@@ -6,6 +6,31 @@ const { URL } = require("node:url");
 const root = __dirname;
 const port = Number(process.env.PORT || 3000);
 const env = loadEnv(path.join(root, ".env.local"));
+const configuredTimeoutMs = Number(env.API_TIMEOUT_MS || 120000);
+const apiTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 120000;
+const openaiResponsesUrl = env.OPENAI_RESPONSES_URL || "https://api.openai.com/v1/responses";
+const perplexitySonarUrl = env.PERPLEXITY_SONAR_URL || "https://api.perplexity.ai/v1/sonar";
+const openaiModel = env.OPENAI_MODEL || "gpt-4.1-mini";
+const perplexityModel = env.PERPLEXITY_MODEL || "sonar-deep-research";
+const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.co";
+const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
+const autoCollectTime = env.AUTO_COLLECT_TIME || "07:00";
+const autoCollectTimezone = env.AUTO_COLLECT_TIMEZONE || "Asia/Seoul";
+const autoCollectLimit = Math.max(1, Math.min(Number(env.AUTO_COLLECT_LIMIT) || 5, 8));
+let lastScheduledCollectionDate = "";
+let collectionRunning = false;
+
+class AppError extends Error {
+  constructor(message, status = 500, code = "APP_ERROR", details = "", userMessage = "") {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
+    this.userMessage = userMessage;
+  }
+}
+
+const categories = new Set(["Fashion", "Space", "Food", "Travel", "Hotel", "Object", "Perfume", "Architecture", "Product", "Brand", "Book", "Magazine", "Artwork", "Playlist", "Restaurant", "Cafe", "Store", "Exhibition"]);
 
 function loadEnv(filePath) {
   const values = { ...process.env };
@@ -32,6 +57,41 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendError(res, error) {
+  const status = error.status || 500;
+  const code = error.code || "INTERNAL_ERROR";
+  log("error", error.message, { code, status, details: error.details || "" });
+  sendJson(res, status, { error: error.message, code, userMessage: error.userMessage || userMessageForCode(code) });
+}
+
+function log(level, message, meta = {}) {
+  const entry = { timestamp: new Date().toISOString(), level, message, ...meta };
+  const line = JSON.stringify(entry);
+  if (level === "error") console.error(line);
+  else console.log(line);
+}
+
+function userMessageForCode(code) {
+  return {
+    INVALID_JSON: "요청 형식이 올바르지 않습니다. 페이지를 새로고침한 뒤 다시 시도하세요.",
+    REQUEST_TOO_LARGE: "입력 내용이 너무 깁니다. 메모를 줄인 뒤 다시 시도하세요.",
+    INVALID_INPUT: "입력값을 확인해 주세요. URL 형식이나 글자 수 제한을 벗어났습니다.",
+    MISSING_OPENAI_KEY: "OpenAI API 키가 설정되지 않았습니다. .env.local을 확인해 주세요.",
+    MISSING_PERPLEXITY_KEY: "Perplexity API 키가 설정되지 않았습니다. .env.local을 확인해 주세요.",
+    MISSING_SUPABASE_KEY: "Supabase service role key가 설정되지 않았습니다. .env.local을 확인해 주세요.",
+    SUPABASE_API_ERROR: "Supabase 저장/조회에 실패했습니다. 테이블, RLS, service role key를 확인해 주세요.",
+    RSS_FETCH_ERROR: "RSS 피드를 가져오지 못했습니다. URL과 피드 형식을 확인해 주세요.",
+    SOURCE_UNSUPPORTED: "이 사이트에서는 RSS 또는 정적 기사 목록을 찾지 못했습니다. JavaScript 렌더링이나 로그인/봇 차단이 필요할 수 있습니다.",
+    API_TIMEOUT: "외부 API 응답 시간이 초과됐습니다. 잠시 후 다시 시도하세요.",
+    API_NETWORK_ERROR: "외부 API에 연결하지 못했습니다. 네트워크 상태를 확인해 주세요.",
+    OPENAI_API_ERROR: "OpenAI API 호출에 실패했습니다. 키, 모델명, 사용량 제한을 확인해 주세요.",
+    PERPLEXITY_API_ERROR: "Perplexity API 호출에 실패했습니다. 키, 모델명, 사용량 제한을 확인해 주세요.",
+    API_INVALID_JSON: "외부 API 응답 형식이 예상과 다릅니다. 잠시 후 다시 시도하세요.",
+    MODEL_JSON_PARSE_FAILED: "AI가 편집 가능한 JSON 형식으로 응답하지 않았습니다. 다시 생성해 주세요.",
+    MODEL_OUTPUT_INVALID: "AI 응답에 필요한 카드 데이터가 부족합니다. 다시 생성해 주세요."
+  }[code] || "처리 중 오류가 발생했습니다. 콘솔과 서버 로그를 확인해 주세요.";
+}
+
 function sendText(res, status, text) {
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(text);
@@ -40,21 +100,27 @@ function sendText(res, status, text) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
     req.on("data", (chunk) => {
       body += chunk;
       if (body.length > 1_000_000) {
         req.destroy();
-        reject(new Error("Request body is too large."));
+        finish(reject, new AppError("Request body is too large.", 413, "REQUEST_TOO_LARGE"));
       }
     });
     req.on("end", () => {
       try {
-        resolve(body ? JSON.parse(body) : {});
+        finish(resolve, body ? JSON.parse(body) : {});
       } catch {
-        reject(new Error("Invalid JSON body."));
+        finish(reject, new AppError("Invalid JSON body.", 400, "INVALID_JSON"));
       }
     });
-    req.on("error", reject);
+    req.on("error", (error) => finish(reject, error));
   });
 }
 
@@ -88,9 +154,962 @@ function parseJsonText(text) {
   return JSON.parse(cleaned);
 }
 
+async function fetchWithTimeout(url, options, label) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), apiTimeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new AppError(`${label} request timed out.`, 504, "API_TIMEOUT");
+    }
+    throw new AppError(`${label} request failed.`, 502, "API_NETWORK_ERROR", error.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function parseJsonResponse(text, label) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new AppError(`${label} returned invalid JSON.`, 502, "API_INVALID_JSON", text.slice(0, 500));
+  }
+}
+
+function parseModelJson(text, label) {
+  try {
+    return parseJsonText(text);
+  } catch {
+    throw new AppError(`${label} returned a response that could not be parsed as JSON.`, 502, "MODEL_JSON_PARSE_FAILED", text.slice(0, 500));
+  }
+}
+
+function cleanString(value, fallback = "") {
+  return String(value || "").trim() || fallback;
+}
+
+function assertMaxLength(value, max, field) {
+  if (value.length > max) {
+    throw new AppError(`${field} is too long.`, 400, "INVALID_INPUT", `${field} length=${value.length}, max=${max}`);
+  }
+}
+
+function validateUrl(value) {
+  if (!value) return "";
+  assertMaxLength(value, 2000, "sourceUrl");
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Unsupported protocol");
+    return value;
+  } catch {
+    throw new AppError("sourceUrl must be a valid http or https URL.", 400, "INVALID_INPUT", value.slice(0, 200));
+  }
+}
+
+function validateResearchInput(body) {
+  const input = {
+    name: cleanString(body.name, "Untitled Space"),
+    sourceUrl: validateUrl(cleanString(body.sourceUrl)),
+    category: cleanString(body.category, "Space"),
+    notes: cleanString(body.notes),
+    imageCredit: cleanString(body.imageCredit),
+    imageUsageStatus: cleanString(body.imageUsageStatus, "unknown")
+  };
+  assertMaxLength(input.name, 120, "name");
+  assertMaxLength(input.category, 40, "category");
+  assertMaxLength(input.notes, 12000, "notes");
+  assertMaxLength(input.imageCredit, 240, "imageCredit");
+  assertMaxLength(input.imageUsageStatus, 40, "imageUsageStatus");
+  if (!categories.has(input.category)) {
+    throw new AppError("category is not supported.", 400, "INVALID_INPUT", input.category);
+  }
+  return input;
+}
+
+function validateDeckInput(body) {
+  const input = {
+    title: cleanString(body.title, "Untitled Space"),
+    format: cleanString(body.format, "Check-in"),
+    angle: cleanString(body.angle),
+    hook: cleanString(body.hook),
+    notes: cleanString(body.notes),
+    imageCredit: cleanString(body.imageCredit),
+    imageUsageStatus: cleanString(body.imageUsageStatus, "unknown")
+  };
+  assertMaxLength(input.title, 120, "title");
+  assertMaxLength(input.format, 40, "format");
+  assertMaxLength(input.angle, 2000, "angle");
+  assertMaxLength(input.hook, 1000, "hook");
+  assertMaxLength(input.notes, 12000, "notes");
+  assertMaxLength(input.imageCredit, 240, "imageCredit");
+  assertMaxLength(input.imageUsageStatus, 40, "imageUsageStatus");
+  return input;
+}
+
+function validateCards(cards) {
+  if (!Array.isArray(cards) || cards.length < 5 || cards.length > 10) {
+    throw new AppError("Model returned an invalid number of cards.", 502, "MODEL_OUTPUT_INVALID", `cards=${Array.isArray(cards) ? cards.length : typeof cards}`);
+  }
+  return cards.map((card, index) => {
+    const title = cleanString(card?.title);
+    const copy = cleanString(card?.copy);
+    if (!title || !copy) {
+      throw new AppError("Model returned an incomplete card.", 502, "MODEL_OUTPUT_INVALID", `card index=${index}`);
+    }
+    if (title.length > 80 || copy.length > 1000) {
+      throw new AppError("Model returned a card that is too long.", 502, "MODEL_OUTPUT_INVALID", `card index=${index}, title=${title.length}, copy=${copy.length}`);
+    }
+    return { title, copy };
+  });
+}
+
+function validateResearchGenerated(generated) {
+  return {
+    brief: generated.brief && typeof generated.brief === "object" ? generated.brief : {},
+    analysis: generated.analysis && typeof generated.analysis === "object" ? generated.analysis : {},
+    researchFacts: Array.isArray(generated.researchFacts) ? generated.researchFacts : [],
+    cards: Array.isArray(generated.cards) && generated.cards.length ? validateCards(generated.cards) : [],
+    caption: cleanString(generated.caption),
+    sourceSummary: Array.isArray(generated.sourceSummary) ? generated.sourceSummary : []
+  };
+}
+
+function validateDeckGenerated(generated) {
+  const cards = validateCards(generated.cards).map((card) => ({
+    ...card,
+    title: card.title === "Editor&apos;s Note" ? "Editor's Note" : card.title
+  }));
+  if (cards.length !== 7) {
+    throw new AppError("Model returned a deck that is not exactly seven slides.", 502, "MODEL_OUTPUT_INVALID", `cards=${cards.length}`);
+  }
+  return {
+    cards,
+    caption: cleanString(generated.caption),
+    hashtags: Array.isArray(generated.hashtags) ? generated.hashtags.map((tag) => cleanString(tag)).filter(Boolean) : [],
+    creditNote: cleanString(generated.credit_note || generated.creditNote),
+    sourceNote: cleanString(generated.source_note || generated.sourceNote)
+  };
+}
+
+
+function requireSupabase() {
+  if (!supabaseServiceRoleKey) {
+    throw new AppError("SUPABASE_SERVICE_ROLE_KEY is missing.", 500, "MISSING_SUPABASE_KEY");
+  }
+}
+
+async function supabaseRequest(pathname, options = {}) {
+  requireSupabase();
+  const response = await fetchWithTimeout(`${supabaseUrl}/rest/v1/${pathname}`, {
+    ...options,
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...(options.headers || {})
+    }
+  }, "Supabase API");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`Supabase API failed with status ${response.status}.`, 502, "SUPABASE_API_ERROR", text.slice(0, 500));
+  }
+  if (!text || response.status === 204) return null;
+  return parseJsonResponse(text, "Supabase API");
+}
+
+function toDbAnalysis(brief) {
+  return {
+    generated_title: cleanString(brief.generatedTitle),
+    one_line_summary: cleanString(brief.oneLineSummary),
+    three_line_summary: cleanString(brief.threeLineSummary),
+    category: cleanString(brief.category, "Space"),
+    recommendation_reason: cleanString(brief.recommendationReason),
+    why_this_feels_good: cleanString(brief.whyThisFeelsGood),
+    editorial_angle: cleanString(brief.editorialAngle || brief.angle),
+    visual_strength: cleanString(brief.visualStrength),
+    kevin_taste_fit: cleanString(brief.kevinTasteFit),
+    suitability_score: Number.isFinite(Number(brief.suitabilityScore)) ? Number(brief.suitabilityScore) : null,
+    taste_fit_score: Number.isFinite(Number(brief.tasteFitScore)) ? Number(brief.tasteFitScore) : null,
+    visual_score: Number.isFinite(Number(brief.visualScore)) ? Number(brief.visualScore) : null,
+    story_score: Number.isFinite(Number(brief.storyScore)) ? Number(brief.storyScore) : null,
+    suggested_status: cleanString(brief.suggestedStatus, "Candidate"),
+    key_points: Array.isArray(brief.keyPoints) ? brief.keyPoints : [],
+    source_facts: Array.isArray(brief.sourceFacts) ? brief.sourceFacts : [],
+    risk_notes: cleanString(brief.riskNotes),
+    verification_needed: cleanString(brief.verificationNeeded || brief.verification),
+    model: openaiModel
+  };
+}
+
+function normalizeBoardRow(row) {
+  const content = row.content_items || null;
+  const kevinFind = row.kevin_finds || null;
+  const analysis = row.ai_analyses || null;
+  const source = content || kevinFind || {};
+  return {
+    id: row.id,
+    itemType: row.item_type,
+    status: row.status,
+    priority: row.priority,
+    editorNote: row.editor_note || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    contentItemId: row.content_item_id,
+    kevinFindId: row.kevin_find_id,
+    aiAnalysisId: row.ai_analysis_id,
+    name: source.title || source.name || analysis?.generated_title || "Untitled Find",
+    title: source.title || source.name || analysis?.generated_title || "Untitled Find",
+    sourceUrl: source.url || "",
+    sourceName: source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type),
+    category: analysis?.category || source.category || "Space",
+    notes: source.raw_content || source.notes || "",
+    angle: analysis?.editorial_angle || row.editor_note || "",
+    oneLineSummary: analysis?.one_line_summary || "",
+    whyThisFeelsGood: analysis?.why_this_feels_good || "",
+    visualStrength: analysis?.visual_strength || "",
+    kevinTasteFit: analysis?.kevin_taste_fit || "",
+    recommendationReason: analysis?.recommendation_reason || "",
+    suitabilityScore: analysis?.suitability_score ?? null,
+    tasteFitScore: analysis?.taste_fit_score ?? null,
+    visualScore: analysis?.visual_score ?? null,
+    storyScore: analysis?.story_score ?? null,
+    verification: analysis?.verification_needed || "",
+    imageUrl: source.image_url || "",
+    imageCredit: source.image_credit || "",
+    imageUsageStatus: source.image_usage_status || "unknown",
+    createdAtLabel: row.created_at ? new Date(row.created_at).toLocaleString("ko-KR") : ""
+  };
+}
+
+
+function decodeXml(value) {
+  return cleanString(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtml(value) {
+  return decodeXml(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function firstTag(xml, tag) {
+  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+
+function firstAttr(xml, tag, attr) {
+  const match = xml.match(new RegExp(`<${tag}[^>]*\\s${attr}=["']([^"']+)["'][^>]*>`, "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+
+function parseFeedDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function absolutizeUrl(value, baseUrl) {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return cleanString(value);
+  }
+}
+
+function parseFeedItems(xml, feedUrl) {
+  const items = [];
+  const rssItemPattern = /<item\b[\s\S]*?<\/item>/gi;
+  const atomEntryPattern = /<entry\b[\s\S]*?<\/entry>/gi;
+  const blocks = xml.match(rssItemPattern) || xml.match(atomEntryPattern) || [];
+  for (const block of blocks.slice(0, 30)) {
+    const title = stripHtml(firstTag(block, "title"));
+    const link = absolutizeUrl(firstTag(block, "link") || firstAttr(block, "link", "href"), feedUrl);
+    const description = stripHtml(firstTag(block, "description") || firstTag(block, "summary") || firstTag(block, "content:encoded") || firstTag(block, "content"));
+    const imageUrl = absolutizeUrl(
+      firstTag(block, "media:thumbnail") ||
+      firstAttr(block, "media:thumbnail", "url") ||
+      firstAttr(block, "media:content", "url") ||
+      firstAttr(block, "enclosure", "url"),
+      feedUrl
+    );
+    if (!title || !link) continue;
+    items.push({
+      title,
+      url: link,
+      rawExcerpt: description.slice(0, 1200),
+      imageUrl,
+      publishedAt: parseFeedDate(firstTag(block, "pubDate") || firstTag(block, "published") || firstTag(block, "updated"))
+    });
+  }
+  return items;
+}
+
+async function fetchRssItems(feedUrl) {
+  const response = await fetchWithTimeout(feedUrl, {
+    headers: {
+      "User-Agent": "dig.everyday RSS collector/0.1",
+      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+    }
+  }, "RSS Feed");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`RSS feed failed with status ${response.status}.`, 502, "RSS_FETCH_ERROR", text.slice(0, 500));
+  }
+  const items = parseFeedItems(text, feedUrl);
+  if (!items.length) {
+    throw new AppError("RSS feed did not contain readable items.", 422, "RSS_FETCH_ERROR", text.slice(0, 500));
+  }
+  return items;
+}
+
+function normalizeScore(value) {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return null;
+  return Math.max(0, Math.min(score <= 10 ? score * 10 : score, 100));
+}
+
+function normalizeAnalysisForDb(analysis, category) {
+  return {
+    generated_title: cleanString(analysis.generated_title),
+    one_line_summary: cleanString(analysis.one_line_summary),
+    three_line_summary: cleanString(analysis.three_line_summary),
+    category: cleanString(analysis.category, category || "Space"),
+    recommendation_reason: cleanString(analysis.recommendation_reason),
+    why_this_feels_good: cleanString(analysis.why_this_feels_good),
+    editorial_angle: cleanString(analysis.editorial_angle),
+    visual_strength: cleanString(analysis.visual_strength),
+    kevin_taste_fit: cleanString(analysis.kevin_taste_fit),
+    suitability_score: normalizeScore(analysis.suitability_score),
+    taste_fit_score: normalizeScore(analysis.taste_fit_score),
+    visual_score: normalizeScore(analysis.visual_score),
+    story_score: normalizeScore(analysis.story_score),
+    suggested_status: cleanString(analysis.suggested_status, "Candidate"),
+    key_points: Array.isArray(analysis.key_points) ? analysis.key_points : [],
+    source_facts: Array.isArray(analysis.source_facts) ? analysis.source_facts : [],
+    risk_notes: cleanString(analysis.risk_notes),
+    verification_needed: cleanString(analysis.verification_needed),
+    model: openaiModel
+  };
+}
+
+async function callOpenAIRssAnalysis(feed, item, category) {
+  if (!env.OPENAI_API_KEY) {
+    throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
+  }
+  const response = await fetchWithTimeout(openaiResponsesUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: openaiModel,
+      input: [
+        {
+          role: "developer",
+          content: [
+            "You are the first-pass editor for dig.everyday.",
+            "Judge RSS items as lifestyle curation candidates, not news headlines.",
+            "Prefer quiet, minimal, editorial, curated, timeless finds.",
+            "Reject generic viral news, listicles, hype, and clickbait.",
+            "All user-facing JSON string values must be Korean, except proper nouns.",
+            "Return only valid JSON. No markdown."
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: [
+            "Analyze this RSS item for curation.",
+            "All score fields must be integers from 0 to 100.",
+            "JSON shape:",
+            "{",
+            '  "generated_title": "...",',
+            '  "one_line_summary": "...",',
+            '  "three_line_summary": "...",',
+            '  "category": "Fashion|Space|Food|Travel|Hotel|Object|Perfume|Architecture|Product|Brand|Book|Magazine|Artwork|Playlist",',
+            '  "recommendation_reason": "...",',
+            '  "why_this_feels_good": "...",',
+            '  "editorial_angle": "...",',
+            '  "visual_strength": "...",',
+            '  "kevin_taste_fit": "...",',
+            '  "suitability_score": 0,',
+            '  "taste_fit_score": 0,',
+            '  "visual_score": 0,',
+            '  "story_score": 0,',
+            '  "suggested_status": "Candidate|Approved|Hold|Rejected|Dig More Candidate",',
+            '  "risk_notes": "...",',
+            '  "verification_needed": "...",',
+            '  "key_points": ["..."],',
+            '  "source_facts": [{"section": "Context|Visual|Taste|Practical", "fact": "...", "confidence": "high|medium|low"}]',
+            "}",
+            "",
+            JSON.stringify({ feed, item, preferredCategory: category }, null, 2)
+          ].join("\n")
+        }
+      ]
+    })
+  }, "OpenAI API");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`OpenAI API failed with status ${response.status}.`, 502, "OPENAI_API_ERROR", text.slice(0, 500));
+  }
+  const data = parseJsonResponse(text, "OpenAI API");
+  return parseModelJson(getOpenAIText(data), "OpenAI");
+}
+
+async function resolveSourceDefinition(inputUrl) {
+  const response = await fetchWithTimeout(inputUrl, {
+    headers: {
+      "User-Agent": "dig.everyday source discovery/0.1",
+      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, */*"
+    }
+  }, "Source discovery");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`Source discovery failed with status ${response.status}.`, 502, "RSS_FETCH_ERROR", text.slice(0, 500));
+  }
+  const contentType = cleanString(response.headers.get("content-type")).toLowerCase();
+  if (contentType.includes("xml") || /^\s*<\?xml|^\s*<(rss|feed)\b/i.test(text)) {
+    return { type: "rss", url: inputUrl };
+  }
+  const linkTags = text.match(/<link\b[^>]*>/gi) || [];
+  for (const tag of linkTags) {
+    const rel = firstAttr(tag, "link", "rel").toLowerCase();
+    const type = firstAttr(tag, "link", "type").toLowerCase();
+    const href = firstAttr(tag, "link", "href");
+    if (rel.includes("alternate") && (type.includes("rss") || type.includes("atom")) && href) {
+      return { type: "rss", url: absolutizeUrl(href, inputUrl) };
+    }
+  }
+  return { type: "url", url: inputUrl };
+}
+
+async function findSourceByUrl(url) {
+  const rows = await supabaseRequest(`sources?select=*&url=eq.${encodeURIComponent(url)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+  return rows?.[0] || null;
+}
+
+async function validateSourceCompatibility(definition) {
+  if (definition.type === "rss") {
+    const items = await fetchRssItems(definition.url);
+    if (!items.length) throw new AppError("RSS feed contains no readable entries.", 422, "SOURCE_UNSUPPORTED", definition.url);
+    return { type: "rss", readableItems: items.length };
+  }
+  const items = await fetchWebItems(definition.url, 1);
+  if (!items.length) throw new AppError("Website contains no readable article links.", 422, "SOURCE_UNSUPPORTED", definition.url);
+  return { type: "url", readableItems: items.length };
+}
+
+async function saveSource({ name, url, category, isActive = true }) {
+  const definition = await resolveSourceDefinition(url);
+  await validateSourceCompatibility(definition);
+  const existing = await findSourceByUrl(definition.url);
+  if (existing) {
+    const rows = await supabaseRequest(`sources?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, category, is_active: isActive })
+    });
+    return rows?.[0] || existing;
+  }
+  const rows = await supabaseRequest("sources", {
+    method: "POST",
+    body: JSON.stringify({ type: definition.type, name, url: definition.url, category, is_active: isActive })
+  });
+  return rows?.[0];
+}
+
+function metaContent(html, key, value) {
+  const tags = html.match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const attrValue = firstAttr(tag, "meta", key).toLowerCase();
+    if (attrValue === value.toLowerCase()) return decodeXml(firstAttr(tag, "meta", "content"));
+  }
+  return "";
+}
+
+async function fetchArticleMetadata(url, fallbackTitle) {
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: { "User-Agent": "dig.everyday crawler/0.1", Accept: "text/html,application/xhtml+xml,*/*" }
+    }, "Article page");
+    const html = await response.text();
+    if (!response.ok) return { title: fallbackTitle, url, rawExcerpt: "", imageUrl: "", publishedAt: null };
+    const title = stripHtml(metaContent(html, "property", "og:title") || firstTag(html, "title") || fallbackTitle);
+    const description = stripHtml(metaContent(html, "property", "og:description") || metaContent(html, "name", "description"));
+    const imageUrl = absolutizeUrl(metaContent(html, "property", "og:image"), url);
+    const publishedAt = parseFeedDate(metaContent(html, "property", "article:published_time") || metaContent(html, "name", "date"));
+    return { title, url, rawExcerpt: description.slice(0, 1200), imageUrl, publishedAt };
+  } catch {
+    return { title: fallbackTitle, url, rawExcerpt: "", imageUrl: "", publishedAt: null };
+  }
+}
+
+async function fetchWebItems(siteUrl, limit) {
+  const response = await fetchWithTimeout(siteUrl, {
+    headers: { "User-Agent": "dig.everyday crawler/0.1", Accept: "text/html,application/xhtml+xml,*/*" }
+  }, "Website crawl");
+  const html = await response.text();
+  if (!response.ok) throw new AppError(`Website crawl failed with status ${response.status}.`, 502, "RSS_FETCH_ERROR", html.slice(0, 500));
+  const base = new URL(siteUrl);
+  const anchors = html.match(/<a\b[\s\S]*?<\/a>/gi) || [];
+  const candidates = [];
+  const seen = new Set();
+  const excluded = /\/(tag|tags|category|categories|author|about|contact|privacy|terms|login|signup|search)(\/|$)/i;
+  for (const anchor of anchors) {
+    const href = firstAttr(anchor, "a", "href");
+    const title = stripHtml(anchor.replace(/^<a\b[^>]*>/i, "").replace(/<\/a>$/i, ""));
+    if (!href || title.length < 12 || title.length > 180) continue;
+    const url = absolutizeUrl(href, siteUrl);
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname !== base.hostname || parsed.pathname === "/" || excluded.test(parsed.pathname)) continue;
+      parsed.hash = "";
+      const canonical = parsed.toString();
+      if (seen.has(canonical)) continue;
+      seen.add(canonical);
+      candidates.push({ title, url: canonical });
+    } catch {}
+    if (candidates.length >= Math.max(limit * 3, 12)) break;
+  }
+  if (!candidates.length) throw new AppError("No readable article links were found in the initial HTML. The site may require JavaScript rendering, login, or browser automation.", 422, "SOURCE_UNSUPPORTED", siteUrl);
+  const items = [];
+  for (const candidate of candidates.slice(0, limit)) {
+    items.push(await fetchArticleMetadata(candidate.url, candidate.title));
+  }
+  return items;
+}
+
+async function fetchSourceItems(source, limit) {
+  if (source.type === "url") return fetchWebItems(source.url, limit);
+  return (await fetchRssItems(source.url)).slice(0, limit);
+}
+
+async function getExistingContent(url) {
+  const rows = await supabaseRequest(`content_items?select=*&url=eq.${encodeURIComponent(url)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+  return rows?.[0] || null;
+}
+
+async function getExistingCuration(contentItemId) {
+  const rows = await supabaseRequest(`curation_items?select=*,content_items(*),ai_analyses(*)&content_item_id=eq.${encodeURIComponent(contentItemId)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+  return rows?.[0] || null;
+}
+
+async function collectSource(source, limit = autoCollectLimit) {
+  const sourceItems = await fetchSourceItems(source, limit);
+  const result = { source, imported: 0, skipped: 0, failed: 0, items: [] };
+
+  for (const item of sourceItems) {
+    try {
+      let contentItem = await getExistingContent(item.url);
+      if (contentItem) {
+        const existingCuration = await getExistingCuration(contentItem.id);
+        if (existingCuration) {
+          result.skipped += 1;
+          continue;
+        }
+      } else {
+        const contentRows = await supabaseRequest("content_items", {
+          method: "POST",
+          body: JSON.stringify({
+            source_id: source.id,
+            source_type: source.type,
+            title: item.title,
+            url: item.url,
+            image_url: item.imageUrl,
+            image_source_url: item.url,
+            image_usage_status: "unknown",
+            publisher: source.name,
+            published_at: item.publishedAt,
+            raw_excerpt: item.rawExcerpt,
+            raw_content: item.rawExcerpt,
+            language: "unknown"
+          })
+        });
+        contentItem = contentRows?.[0];
+      }
+      if (!contentItem?.id) throw new AppError("content_items insert returned no id.", 502, "SUPABASE_API_ERROR");
+
+      const analysis = normalizeAnalysisForDb(await callOpenAIRssAnalysis({ name: source.name, url: source.url }, item, source.category), source.category);
+      const analysisRows = await supabaseRequest("ai_analyses", {
+        method: "POST",
+        body: JSON.stringify({ item_type: "daily_find", content_item_id: contentItem.id, ...analysis })
+      });
+      const aiAnalysis = analysisRows?.[0];
+      const boardRows = await supabaseRequest("curation_items", {
+        method: "POST",
+        body: JSON.stringify({
+          item_type: "daily_find",
+          content_item_id: contentItem.id,
+          ai_analysis_id: aiAnalysis?.id || null,
+          status: analysis.suggested_status || "Candidate",
+          editor_note: analysis.editorial_angle || analysis.one_line_summary || ""
+        })
+      });
+      result.items.push(normalizeBoardRow({ ...boardRows[0], content_items: contentItem, ai_analyses: aiAnalysis }));
+      result.imported += 1;
+    } catch (itemError) {
+      result.failed += 1;
+      log("error", "source item import failed", { sourceId: source.id, title: item.title, url: item.url, details: itemError.message });
+    }
+  }
+
+  await supabaseRequest(`sources?id=eq.${encodeURIComponent(source.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ last_fetched_at: new Date().toISOString() })
+  });
+  return result;
+}
+
+async function listActiveSources() {
+  return await supabaseRequest("sources?select=*&is_active=eq.true&order=created_at.asc", { method: "GET", headers: { Prefer: "" } }) || [];
+}
+
+async function runAllSources(trigger = "manual") {
+  if (collectionRunning) return { trigger, running: true, sources: 0, imported: 0, skipped: 0, failed: 0, results: [] };
+  collectionRunning = true;
+  try {
+    const sources = await listActiveSources();
+    const summary = { trigger, running: false, sources: sources.length, imported: 0, skipped: 0, failed: 0, results: [] };
+    for (const source of sources) {
+      try {
+        const result = await collectSource(source, autoCollectLimit);
+        summary.results.push(result);
+        summary.imported += result.imported;
+        summary.skipped += result.skipped;
+        summary.failed += result.failed;
+      } catch (error) {
+        summary.failed += 1;
+        summary.results.push({ source, imported: 0, skipped: 0, failed: 1, items: [], error: error.message });
+        log("error", "source collection failed", { sourceId: source.id, sourceName: source.name, trigger, details: error.message });
+      }
+    }
+    return summary;
+  } finally {
+    collectionRunning = false;
+  }
+}
+
+async function handleListSources(req, res) {
+  try {
+    const rows = await supabaseRequest("sources?select=*&order=created_at.desc", { method: "GET", headers: { Prefer: "" } });
+    sendJson(res, 200, { sources: rows || [], schedule: { time: autoCollectTime, timezone: autoCollectTimezone, limit: autoCollectLimit } });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleCreateSource(req, res) {
+  try {
+    const body = await readBody(req);
+    const url = validateUrl(cleanString(body.url));
+    const name = cleanString(body.name, slugFromUrl(url));
+    const category = cleanString(body.category, "Space");
+    if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
+    const source = await saveSource({ name, url, category, isActive: body.isActive !== false });
+    sendJson(res, 200, { source });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleImportRss(req, res) {
+  try {
+    const body = await readBody(req);
+    const url = validateUrl(cleanString(body.url));
+    const name = cleanString(body.name, slugFromUrl(url));
+    const category = cleanString(body.category, "Space");
+    const limit = Math.max(1, Math.min(Number(body.limit) || autoCollectLimit, 8));
+    if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
+    const source = await saveSource({ name, url, category, isActive: true });
+    const result = await collectSource(source, limit);
+    sendJson(res, 200, result);
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleRunAllSources(req, res) {
+  try {
+    sendJson(res, 200, await runAllSources("manual"));
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleRunSource(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`sources?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    if (!rows?.[0]) throw new AppError("Source not found.", 404, "INVALID_INPUT");
+    sendJson(res, 200, await collectSource(rows[0], autoCollectLimit));
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUpdateSource(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const patch = {};
+    if (typeof body.isActive === "boolean") patch.is_active = body.isActive;
+    if (body.name !== undefined) patch.name = cleanString(body.name);
+    if (body.category !== undefined) patch.category = cleanString(body.category);
+    const rows = await supabaseRequest(`sources?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+    sendJson(res, 200, { source: rows?.[0] || null });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleDeleteSource(req, res, id) {
+  try {
+    await supabaseRequest(`sources?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    sendJson(res, 200, { ok: true });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+function getZonedParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: autoCollectTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+async function schedulerTick() {
+  const now = getZonedParts();
+  if (now.time !== autoCollectTime || lastScheduledCollectionDate === now.date) return;
+  lastScheduledCollectionDate = now.date;
+  log("info", "scheduled collection started", { date: now.date, time: now.time, timezone: autoCollectTimezone });
+  const summary = await runAllSources("schedule");
+  log("info", "scheduled collection completed", { date: now.date, sources: summary.sources, imported: summary.imported, skipped: summary.skipped, failed: summary.failed });
+}
+
+async function runStartupCatchup() {
+  const now = getZonedParts();
+  if (now.time < autoCollectTime || lastScheduledCollectionDate === now.date) return;
+  const sources = await listActiveSources();
+  const needsCollection = sources.some((source) => !source.last_fetched_at || getZonedParts(new Date(source.last_fetched_at)).date !== now.date);
+  if (!needsCollection) {
+    lastScheduledCollectionDate = now.date;
+    return;
+  }
+  lastScheduledCollectionDate = now.date;
+  log("info", "startup catch-up collection started", { date: now.date, timezone: autoCollectTimezone });
+  const summary = await runAllSources("startup-catchup");
+  log("info", "startup catch-up collection completed", { date: now.date, sources: summary.sources, imported: summary.imported, skipped: summary.skipped, failed: summary.failed });
+}
+
+function startCollectionScheduler() {
+  setInterval(() => schedulerTick().catch((error) => log("error", "scheduled collection failed", { details: error.message })), 30_000);
+  runStartupCatchup().catch((error) => log("error", "scheduler startup check failed", { details: error.message }));
+}
+
+async function handleListBoard(req, res) {
+  try {
+    const rows = await supabaseRequest("curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&order=updated_at.desc&limit=80", { method: "GET", headers: { Prefer: "" } });
+    sendJson(res, 200, { items: (rows || []).map(normalizeBoardRow) });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleToday(req, res) {
+  try {
+    const todayStart = `${getZonedParts().date}T00:00:00+09:00`;
+    const rows = await supabaseRequest(`curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&status=in.(Candidate,Approved,Dig%20More%20Candidate)&created_at=gte.${encodeURIComponent(todayStart)}&order=created_at.desc&limit=100`, { method: "GET", headers: { Prefer: "" } });
+    const items = (rows || []).map(normalizeBoardRow).sort((a, b) => {
+      const scoreA = [a.suitabilityScore, a.tasteFitScore, a.visualScore, a.storyScore].reduce((sum, value) => sum + (normalizeScore(value) || 0), 0);
+      const scoreB = [b.suitabilityScore, b.tasteFitScore, b.visualScore, b.storyScore].reduce((sum, value) => sum + (normalizeScore(value) || 0), 0);
+      return scoreB - scoreA;
+    }).slice(0, 12);
+    sendJson(res, 200, { items, schedule: { time: autoCollectTime, timezone: autoCollectTimezone } });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUpdateBoardItem(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const status = cleanString(body.status);
+    const allowed = new Set(["Candidate", "Approved", "Hold", "Rejected", "Dig More Candidate"]);
+    if (!allowed.has(status)) throw new AppError("status is not supported.", 400, "INVALID_INPUT", status);
+    const rows = await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, updated_at: new Date().toISOString() })
+    });
+    sendJson(res, 200, { item: rows?.[0] || null });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleSaveDailyFind(req, res) {
+  try {
+    const body = await readBody(req);
+    const brief = body.brief && typeof body.brief === "object" ? body.brief : body;
+    const title = cleanString(brief.name || brief.generatedTitle, "Untitled Find");
+    const sourceUrl = cleanString(brief.sourceUrl, `manual://daily-find/${Date.now()}`);
+    const contentRows = await supabaseRequest("content_items?on_conflict=url", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        title,
+        url: sourceUrl,
+        image_url: cleanString(brief.imageUrl),
+        image_credit: cleanString(brief.imageCredit),
+        image_source_url: cleanString(brief.imageSourceUrl || brief.sourceUrl),
+        image_usage_status: cleanString(brief.imageUsageStatus, "unknown"),
+        publisher: cleanString(brief.sourceName),
+        raw_excerpt: cleanString(brief.oneLineSummary || brief.angle),
+        raw_content: cleanString(brief.notes),
+        language: "ko"
+      })
+    });
+    const contentItem = contentRows?.[0];
+    if (!contentItem?.id) throw new AppError("content_items insert returned no id.", 502, "SUPABASE_API_ERROR");
+
+    const analysisRows = await supabaseRequest("ai_analyses", {
+      method: "POST",
+      body: JSON.stringify({
+        item_type: "daily_find",
+        content_item_id: contentItem.id,
+        ...toDbAnalysis(brief)
+      })
+    });
+    const analysis = analysisRows?.[0];
+
+    const boardRows = await supabaseRequest("curation_items", {
+      method: "POST",
+      body: JSON.stringify({
+        item_type: "daily_find",
+        content_item_id: contentItem.id,
+        ai_analysis_id: analysis?.id || null,
+        status: cleanString(brief.suggestedStatus, "Candidate"),
+        editor_note: cleanString(brief.editorNote || brief.angle)
+      })
+    });
+    sendJson(res, 200, { item: normalizeBoardRow({ ...boardRows[0], content_items: contentItem, ai_analyses: analysis }) });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleSaveKevinFind(req, res) {
+  try {
+    const body = await readBody(req);
+    const name = cleanString(body.name, "Untitled Find");
+    const findRows = await supabaseRequest("kevin_finds", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        category: cleanString(body.category, "Object"),
+        location: cleanString(body.location),
+        visited_at: cleanString(body.visitedAt) || null,
+        rating: Number.isFinite(Number(body.rating)) ? Number(body.rating) : null,
+        notes: cleanString(body.notes),
+        why_saved: cleanString(body.whySaved),
+        image_url: cleanString(body.imageUrl),
+        image_credit: cleanString(body.imageCredit),
+        image_source_url: cleanString(body.imageSourceUrl),
+        image_usage_status: cleanString(body.imageUsageStatus, "owned")
+      })
+    });
+    const kevinFind = findRows?.[0];
+    if (!kevinFind?.id) throw new AppError("kevin_finds insert returned no id.", 502, "SUPABASE_API_ERROR");
+
+    const boardRows = await supabaseRequest("curation_items", {
+      method: "POST",
+      body: JSON.stringify({
+        item_type: "kevin_found",
+        kevin_find_id: kevinFind.id,
+        status: "Candidate",
+        editor_note: cleanString(body.whySaved || body.notes)
+      })
+    });
+    sendJson(res, 200, { item: normalizeBoardRow({ ...boardRows[0], kevin_finds: kevinFind }) });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleDeleteBoardItem(req, res, id) {
+  try {
+    await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    sendJson(res, 200, { ok: true });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleGetBoardItem(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    const row = rows?.[0];
+    if (!row) throw new AppError("Board item not found.", 404, "INVALID_INPUT");
+    sendJson(res, 200, { item: normalizeBoardRow(row) });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleSavePostDraft(req, res) {
+  try {
+    const body = await readBody(req);
+    const cards = validateCards(body.cards);
+    if (cards.length !== 7) throw new AppError("Post draft must have exactly seven slides.", 400, "INVALID_INPUT");
+    const draftRows = await supabaseRequest("post_drafts", {
+      method: "POST",
+      body: JSON.stringify({
+        curation_item_id: cleanString(body.curationItemId) || null,
+        title: cleanString(body.title, "Untitled Find"),
+        category: cleanString(body.category),
+        source_type: cleanString(body.sourceType, "daily_find"),
+        status: "Draft",
+        image_credit: cleanString(body.imageCredit),
+        image_usage_status: cleanString(body.imageUsageStatus, "unknown"),
+        caption: cleanString(body.caption),
+        hashtags: Array.isArray(body.hashtags) ? body.hashtags : [],
+        credit_note: cleanString(body.creditNote),
+        source_note: cleanString(body.sourceNote),
+        editor_note: cleanString(body.editorNote)
+      })
+    });
+    const draft = draftRows?.[0];
+    if (!draft?.id) throw new AppError("post_drafts insert returned no id.", 502, "SUPABASE_API_ERROR");
+    const slideRows = await supabaseRequest("post_slides", {
+      method: "POST",
+      body: JSON.stringify(cards.map((card, index) => ({
+        post_draft_id: draft.id,
+        slide_index: index + 1,
+        slide_type: card.title,
+        title: card.title,
+        body: card.copy
+      })))
+    });
+    sendJson(res, 200, { draft, slides: slideRows || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
 async function callPerplexity(input) {
   if (!env.PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY is missing.");
+    throw new AppError("PERPLEXITY_API_KEY is missing.", 500, "MISSING_PERPLEXITY_KEY");
   }
 
   const prompt = [
@@ -99,8 +1118,8 @@ async function callPerplexity(input) {
     `Category: ${input.category || "Space"}`,
     `Notes: ${input.notes || "none"}`,
     "",
-    "Do deep editorial research for room.service, a Korean Instagram magazine about spaces and brands.",
-    "The output will be used to make a six-card post, so do not stop at a short summary.",
+    "Do deep editorial research for dig.everyday, a Korean Instagram curation system about lifestyle finds.",
+    "The output will be used for editorial curation first, so do not stop at a short summary.",
     "",
     "Research requirements:",
     "1. Identify official website, official social accounts, press/editorial articles, map/listing pages, and credible third-party mentions when available.",
@@ -121,31 +1140,31 @@ async function callPerplexity(input) {
     "Prefer citations and source-aware details over generic claims."
   ].join("\n");
 
-  const response = await fetch("https://api.perplexity.ai/v1/sonar", {
+  const response = await fetchWithTimeout(perplexitySonarUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${env.PERPLEXITY_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.PERPLEXITY_MODEL || "sonar-deep-research",
+      model: perplexityModel,
       messages: [
         {
           role: "system",
-          content: "You are a precise web researcher for a Korean editorial Instagram magazine about spaces and brands."
+          content: "You are a precise web researcher for dig.everyday, a Korean editorial Instagram curation system about lifestyle finds."
         },
         { role: "user", content: prompt }
       ],
       max_tokens: 6000
     })
-  });
+  }, "Perplexity API");
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`Perplexity API failed: ${response.status} ${text}`);
+    throw new AppError(`Perplexity API failed with status ${response.status}.`, 502, "PERPLEXITY_API_ERROR", text.slice(0, 500));
   }
 
-  const data = JSON.parse(text);
+  const data = parseJsonResponse(text, "Perplexity API");
   return {
     content: data.choices?.[0]?.message?.content || "",
     citations: data.citations || [],
@@ -155,7 +1174,7 @@ async function callPerplexity(input) {
 
 async function callOpenAI(input, research) {
   if (!env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is missing.");
+    throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
   }
 
   const sourceText = JSON.stringify({
@@ -165,52 +1184,48 @@ async function callOpenAI(input, research) {
     searchResults: research.searchResults
   }, null, 2);
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetchWithTimeout(openaiResponsesUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: openaiModel,
       input: [
         {
           role: "developer",
           content: [
-            "You write for room.service, a Korean editorial Instagram magazine.",
+            "You write for dig.everyday, a Korean editorial Instagram curation system.",
             "All user-facing JSON string values must be written in Korean.",
             "Translate English research material into natural Korean before writing.",
             "Keep proper nouns, brand names, place names, menu names, and URLs in their original form when needed.",
             "Tone: short, dry, dense with information.",
-            "First card must create interest.",
-            "Core structure: Hook, Origin, Growth, Signature, Why it matters, Conclusion.",
-            "Create 5 to 10 cards depending on available research depth. If enough material exists, add Evidence, Practical Info, or Editor Note.",
+            "Analyze first. Separate summary, classification, and taste evaluation from post copy.",
+            "Do not generate carousel slides in Analyze. Only generate analysis fields for curation.",
             "Forbidden: marketing copy, excessive adjectives, exclamation marks.",
             "Do not invent facts. Separate facts, interpretation, and verification needs.",
-            "Cards can be concise, but the brief must contain enough material for production.",
+            "The brief must contain enough material for a later seven-slide post.",
             "Return only valid JSON. No markdown."
           ].join("\n")
         },
         {
           role: "user",
           content: [
-            "Create a production-ready research brief and card news draft from this research.",
+            "Create a production-ready Analyze result from this research.",
             "JSON shape:",
             "{",
             '  "brief": {"angle": "...", "notes": "8-12 dense Korean bullets grouped by Origin/Growth/Signature/Context", "verification": "specific unchecked claims and what source should confirm them"},',
-            '  "researchFacts": [{"section": "Origin|Growth|Signature|Why it matters|Practical", "fact": "...", "sourceHint": "...", "confidence": "high|medium|low"}],',
-            '  "cards": [{"title": "Hook|Origin|Growth|Signature|Why it matters|Conclusion|Evidence|Practical Info|Editor Note", "copy": "1-3 short Korean lines"}, ... 5 to 10 cards total],',
-            '  "caption": "...",',
+            '  "analysis": {"generated_title": "...", "one_line_summary": "...", "three_line_summary": "...", "category": "Fashion|Space|Food|Travel|Hotel|Object|Perfume|Architecture|Product|Brand|Book|Magazine|Artwork|Playlist", "recommendation_reason": "...", "why_this_feels_good": "...", "editorial_angle": "...", "visual_strength": "...", "kevin_taste_fit": "...", "suitability_score": 0, "taste_fit_score": 0, "visual_score": 0, "story_score": 0, "suggested_status": "Candidate|Approved|Hold|Rejected|Dig More Candidate", "risk_notes": "...", "verification_needed": "..."},',
+            '  "researchFacts": [{"section": "Origin|Context|Visual|Taste|Practical", "fact": "...", "sourceHint": "...", "confidence": "high|medium|low"}],',
             '  "sourceSummary": [{"title": "...", "url": "..."}]',
             "}",
             "",
-            "Card copy rules:",
-            "- Every card copy must be Korean.",
-            "- Do not create a Source Note card. Keep sources only in sourceSummary.",
-            "- Hook: must trigger curiosity, not explain everything.",
-            "- Origin/Growth/Signature: use concrete facts.",
-            "- Why it matters: editorial interpretation based on facts.",
-            "- Conclusion: dry, memorable, no sales language.",
+            "Taste filter rules:",
+            "- This is not a trend detector. Judge whether the find feels quiet, minimal, editorial, curated, and timeless.",
+            "- why_this_feels_good must explain mood, material, context, restraint, or rhythm.",
+            "- visual_strength must judge whether images can carry an Instagram carousel.",
+            "- kevin_taste_fit must be honest. Reject generic viral content.",
             "- Avoid words like must-visit, hidden gem, perfect, special, amazing.",
             "",
             sourceText
@@ -218,35 +1233,35 @@ async function callOpenAI(input, research) {
         }
       ]
     })
-  });
+  }, "OpenAI API");
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`OpenAI API failed: ${response.status} ${text}`);
+    throw new AppError(`OpenAI API failed with status ${response.status}.`, 502, "OPENAI_API_ERROR", text.slice(0, 500));
   }
 
-  const data = JSON.parse(text);
-  return parseJsonText(getOpenAIText(data));
+  const data = parseJsonResponse(text, "OpenAI API");
+  return parseModelJson(getOpenAIText(data), "OpenAI");
 }
 
 async function callOpenAICreateDeck(input) {
   if (!env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is missing.");
+    throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetchWithTimeout(openaiResponsesUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: openaiModel,
       input: [
         {
           role: "developer",
           content: [
-            "You write for room.service, a Korean editorial Instagram magazine.",
+            "You write for dig.everyday, a Korean editorial Instagram curation system.",
             "All user-facing text must be Korean, except proper nouns.",
             "Tone: short, dry, dense with information.",
             "Forbidden: marketing copy, excessive adjectives, exclamation marks.",
@@ -257,13 +1272,15 @@ async function callOpenAICreateDeck(input) {
         {
           role: "user",
           content: [
-            "Create a 5-10 card Instagram carousel draft.",
-            "Use this structure first: Hook, Origin, Growth, Signature, Why it matters, Conclusion.",
-            "If useful, add Evidence, Practical Info, or Editor Note.",
+            "Create an exact seven-slide Instagram carousel draft and caption.",
+            "Use this fixed slide structure in order: Cover, Introduction, Why It Matters, Detail 1, Detail 2, Editor's Note, CTA.",
             "JSON shape:",
             "{",
-            '  "cards": [{"title": "...", "copy": "1-3 short Korean lines"}],',
-            '  "caption": "short Korean caption"',
+            "  \"cards\": [{\"title\": \"Cover\", \"copy\": \"1-3 short Korean lines\"}, {\"title\": \"Introduction\", \"copy\": \"...\"}, {\"title\": \"Why It Matters\", \"copy\": \"...\"}, {\"title\": \"Detail 1\", \"copy\": \"...\"}, {\"title\": \"Detail 2\", \"copy\": \"...\"}, {\"title\": \"Editor's Note\", \"copy\": \"...\"}, {\"title\": \"CTA\", \"copy\": \"...\"}],",
+            '  "caption": "short Korean caption",',
+            '  "hashtags": ["#..."],',
+            '  "credit_note": "image/source credit note",',
+            '  "source_note": "source verification note"',
             "}",
             "",
             JSON.stringify(input, null, 2)
@@ -271,29 +1288,25 @@ async function callOpenAICreateDeck(input) {
         }
       ]
     })
-  });
+  }, "OpenAI API");
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`OpenAI API failed: ${response.status} ${text}`);
+    throw new AppError(`OpenAI API failed with status ${response.status}.`, 502, "OPENAI_API_ERROR", text.slice(0, 500));
   }
 
-  const data = JSON.parse(text);
-  return parseJsonText(getOpenAIText(data));
+  const data = parseJsonResponse(text, "OpenAI API");
+  return parseModelJson(getOpenAIText(data), "OpenAI");
 }
 
 async function handleResearch(req, res) {
   try {
     const body = await readBody(req);
-    const input = {
-      name: String(body.name || "").trim() || "Untitled Space",
-      sourceUrl: String(body.sourceUrl || "").trim(),
-      category: String(body.category || "Space").trim(),
-      notes: String(body.notes || "").trim()
-    };
+    const input = validateResearchInput(body);
 
+    log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, hasSourceUrl: Boolean(input.sourceUrl) });
     const research = await callPerplexity(input);
-    const generated = await callOpenAI(input, research);
+    const generated = validateResearchGenerated(await callOpenAI(input, research));
     const now = new Date();
 
     sendJson(res, 200, {
@@ -304,37 +1317,56 @@ async function handleResearch(req, res) {
         category: input.category,
         sourceName: input.sourceUrl ? slugFromUrl(input.sourceUrl) : "manual note",
         notes: generated.brief?.notes || research.content,
-        angle: generated.brief?.angle || "",
-        verification: generated.brief?.verification || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
+        angle: generated.brief?.angle || generated.analysis?.editorial_angle || "",
+        generatedTitle: generated.analysis?.generated_title || "",
+        oneLineSummary: generated.analysis?.one_line_summary || "",
+        threeLineSummary: generated.analysis?.three_line_summary || "",
+        recommendationReason: generated.analysis?.recommendation_reason || "",
+        whyThisFeelsGood: generated.analysis?.why_this_feels_good || "",
+        editorialAngle: generated.analysis?.editorial_angle || "",
+        visualStrength: generated.analysis?.visual_strength || "",
+        kevinTasteFit: generated.analysis?.kevin_taste_fit || "",
+        suitabilityScore: generated.analysis?.suitability_score ?? null,
+        tasteFitScore: generated.analysis?.taste_fit_score ?? null,
+        visualScore: generated.analysis?.visual_score ?? null,
+        storyScore: generated.analysis?.story_score ?? null,
+        suggestedStatus: generated.analysis?.suggested_status || "Candidate",
+        riskNotes: generated.analysis?.risk_notes || "",
+        verificationNeeded: generated.analysis?.verification_needed || generated.brief?.verification || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
+        verification: generated.brief?.verification || generated.analysis?.verification_needed || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
+        imageCredit: input.imageCredit,
+        imageUsageStatus: input.imageUsageStatus,
         createdAt: now.toLocaleString("ko-KR")
       },
       cards: Array.isArray(generated.cards) ? generated.cards : [],
       caption: generated.caption || "",
       sources: generated.sourceSummary || research.searchResults || [],
+      researchFacts: generated.researchFacts || [],
       citations: research.citations || []
     });
+    log("info", "analyze request completed", { route: "/api/research", name: input.name, cardCount: generated.cards.length });
   } catch (error) {
-    sendJson(res, 500, { error: error.message });
+    sendError(res, error);
   }
 }
 
 async function handleCreateDeck(req, res) {
   try {
     const body = await readBody(req);
-    const generated = await callOpenAICreateDeck({
-      title: String(body.title || "Untitled Space").trim(),
-      format: String(body.format || "Check-in").trim(),
-      angle: String(body.angle || "").trim(),
-      hook: String(body.hook || "").trim(),
-      notes: String(body.notes || "").trim()
-    });
+    const input = validateDeckInput(body);
+    log("info", "deck request started", { route: "/api/create-deck", title: input.title, format: input.format });
+    const generated = validateDeckGenerated(await callOpenAICreateDeck(input));
 
     sendJson(res, 200, {
-      cards: Array.isArray(generated.cards) ? generated.cards : [],
-      caption: generated.caption || ""
+      cards: generated.cards,
+      caption: generated.caption || "",
+      hashtags: generated.hashtags || [],
+      creditNote: generated.creditNote || "",
+      sourceNote: generated.sourceNote || ""
     });
+    log("info", "deck request completed", { route: "/api/create-deck", title: input.title, cardCount: generated.cards.length });
   } catch (error) {
-    sendJson(res, 500, { error: error.message });
+    sendError(res, error);
   }
 }
 
@@ -374,13 +1406,80 @@ function serveStatic(req, res) {
   });
 }
 
-const server = http.createServer((req, res) => {
-  if (req.method === "POST" && req.url === "/api/research") {
+function requestHandler(req, res) {
+  const parsed = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = parsed.pathname;
+
+  if (req.method === "POST" && pathname === "/api/research") {
     handleResearch(req, res);
     return;
   }
-  if (req.method === "POST" && req.url === "/api/create-deck") {
+  if (req.method === "POST" && pathname === "/api/create-deck") {
     handleCreateDeck(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/curation-items") {
+    handleListBoard(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/today") {
+    handleToday(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/sources") {
+    handleListSources(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/sources") {
+    handleCreateSource(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/sources/run-all") {
+    handleRunAllSources(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/curation-items/daily-find") {
+    handleSaveDailyFind(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/sources/rss-import") {
+    handleImportRss(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/kevin-finds") {
+    handleSaveKevinFind(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/post-drafts") {
+    handleSavePostDraft(req, res);
+    return;
+  }
+  const sourceRunMatch = pathname.match(/^\/api\/sources\/([^/]+)\/run$/);
+  if (sourceRunMatch && req.method === "POST") {
+    handleRunSource(req, res, sourceRunMatch[1]);
+    return;
+  }
+  const sourceMatch = pathname.match(/^\/api\/sources\/([^/]+)$/);
+  if (sourceMatch && req.method === "PATCH") {
+    handleUpdateSource(req, res, sourceMatch[1]);
+    return;
+  }
+  if (sourceMatch && req.method === "DELETE") {
+    handleDeleteSource(req, res, sourceMatch[1]);
+    return;
+  }
+  const boardItemMatch = pathname.match(/^\/api\/curation-items\/([^/]+)$/);
+  if (boardItemMatch && req.method === "GET") {
+    handleGetBoardItem(req, res, boardItemMatch[1]);
+    return;
+  }
+  if (boardItemMatch && req.method === "PATCH") {
+    handleUpdateBoardItem(req, res, boardItemMatch[1]);
+    return;
+  }
+  if (boardItemMatch && req.method === "DELETE") {
+    handleDeleteBoardItem(req, res, boardItemMatch[1]);
     return;
   }
   if (req.method === "GET") {
@@ -388,8 +1487,33 @@ const server = http.createServer((req, res) => {
     return;
   }
   sendText(res, 405, "Method not allowed");
+}
+
+const server = http.createServer(requestHandler);
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${port} is already in use. Set PORT to another value and restart.`);
+    process.exit(1);
+  }
+  throw error;
 });
 
-server.listen(port, () => {
-  console.log(`room.service server running at http://localhost:${port}`);
-});
+if (require.main === module) {
+  server.listen(port, () => {
+    log("info", "dig.everyday server started", {
+      url: `http://localhost:${port}`,
+      openaiModel,
+      perplexityModel,
+      apiTimeoutMs,
+      autoCollectTime,
+      autoCollectTimezone,
+      autoCollectLimit,
+      openaiResponsesUrl,
+      perplexitySonarUrl
+    });
+    startCollectionScheduler();
+  });
+}
+
+module.exports = { requestHandler, runAllSources };

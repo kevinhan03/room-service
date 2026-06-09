@@ -30,11 +30,25 @@ export function setBusy(element, busy, label) {
     element.dataset.idleText = element.textContent;
     element.textContent = label || element.textContent;
     element.disabled = true;
+    element.setAttribute("aria-busy", "true");
   } else {
     element.textContent = element.dataset.idleText || element.textContent;
     element.disabled = false;
+    element.removeAttribute("aria-busy");
     delete element.dataset.idleText;
   }
+}
+
+let toastTimer;
+
+export function showToast(message, tone = "success") {
+  const toast = $("#actionToast");
+  if (!toast) return;
+  clearTimeout(toastTimer);
+  toast.textContent = message;
+  toast.dataset.tone = tone;
+  toast.classList.add("visible");
+  toastTimer = setTimeout(() => toast.classList.remove("visible"), tone === "error" ? 5200 : 2800);
 }
 
 export function renderBrief(brief) {
@@ -78,7 +92,8 @@ export function renderArchiveItems(items) {
     const sourceName = item.sourceName || item.source_name || type;
     const createdAt = item.createdAtLabel || item.created_at_label || "";
     const angle = item.angle || item.oneLineSummary || item.whyThisFeelsGood || "";
-    return `<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(item.name || item.title)}</p><p class="archive-meta">${safeText(status)} / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)} / ${safeText(createdAt)}</p></div><div class="archive-actions"><button class="mini-btn" data-status="${safeText(item.id)}" data-value="Approved" type="button">Approve</button><button class="mini-btn" data-status="${safeText(item.id)}" data-value="Hold" type="button">Hold</button><button class="mini-btn" data-status="${safeText(item.id)}" data-value="Rejected" type="button">Reject</button><button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button><button class="mini-btn" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div><p class="small">${safeText(angle)}</p></article>`;
+    const statusButton = (value, label) => `<button class="mini-btn status-btn${status === value ? " active" : ""}" data-status="${safeText(item.id)}" data-value="${value}" type="button"${status === value ? " disabled aria-current=\"true\"" : ""}>${label}</button>`;
+    return `<article class="archive-item" data-item-id="${safeText(item.id)}"><div class="archive-top"><div><p class="archive-title">${safeText(item.name || item.title)}</p><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)} / ${safeText(createdAt)}</p></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button><button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div><p class="small">${safeText(angle)}</p></article>`;
   }).join("");
 }
 

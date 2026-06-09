@@ -1,5 +1,5 @@
 import { createDeck, createResearch, createSource, deleteArchiveItem, deleteSource, fetchArchiveItem, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadSources, loadToday, runAllSources, runSource, updateCurationStatus, updateSource } from "./api.js";
-import { $, $$, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, slugFromUrl } from "./render.js";
+import { $, $$, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
 let currentBrief = null;
@@ -55,6 +55,13 @@ function scoreTotal(item) {
   }, 0);
 }
 
+function actionErrorMessage(error) {
+  if (error?.code === "MISSING_SUPABASE_KEY") {
+    return "Vercel에 SUPABASE_SERVICE_ROLE_KEY가 없습니다. 환경변수를 설정한 뒤 다시 배포해 주세요.";
+  }
+  return error?.message || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
 function renderTodayItems(items) {
   const target = $("#todayCandidates");
   if (!target) return;
@@ -62,7 +69,10 @@ function renderTodayItems(items) {
     target.innerHTML = `<div class="empty">아직 준비된 후보가 없습니다. Sources를 등록한 뒤 전체 수집을 실행하세요.</div>`;
     return;
   }
-  target.innerHTML = items.map((item) => `<article class="candidate-card"><div class="candidate-top"><span class="candidate-status">${safeText(item.status || "Candidate")}</span><span class="candidate-score">${scoreTotal(item)} / 400</span></div><p class="candidate-source">${safeText(item.category || "")} / ${safeText(item.sourceName || "")}</p><h3>${safeText(item.name || item.title)}</h3><p class="candidate-summary">${safeText(item.oneLineSummary || item.angle || "")}</p><p class="candidate-reason">${safeText(item.whyThisFeelsGood || item.recommendationReason || "")}</p><div class="inline"><button class="mini-btn" data-approve="${safeText(item.id)}" type="button">Approve</button><button class="mini-btn" data-use="${safeText(item.id)}" type="button">Create Post</button></div></article>`).join("");
+  target.innerHTML = items.map((item) => {
+    const approved = item.status === "Approved";
+    return `<article class="candidate-card" data-item-id="${safeText(item.id)}"><div class="candidate-top"><span class="candidate-status">${safeText(item.status || "Candidate")}</span><span class="candidate-score">${scoreTotal(item)} / 400</span></div><p class="candidate-source">${safeText(item.category || "")} / ${safeText(item.sourceName || "")}</p><h3>${safeText(item.name || item.title)}</h3><p class="candidate-summary">${safeText(item.oneLineSummary || item.angle || "")}</p><p class="candidate-reason">${safeText(item.whyThisFeelsGood || item.recommendationReason || "")}</p><div class="inline"><button class="mini-btn status-btn${approved ? " active" : ""}" data-approve="${safeText(item.id)}" type="button"${approved ? " disabled aria-current=\"true\"" : ""}>${approved ? "Approved" : "Approve"}</button><button class="mini-btn" data-use="${safeText(item.id)}" type="button">Create Post</button></div></article>`;
+  }).join("");
 }
 
 async function renderToday() {
@@ -99,9 +109,17 @@ async function renderSources() {
   }
 }
 
-async function setCurationStatus(id, status) {
-  await updateCurationStatus(id, status);
-  await Promise.all([renderToday(), renderArchive()]);
+async function setCurationStatus(id, status, button) {
+  setBusy(button, true, "저장 중...");
+  try {
+    await updateCurationStatus(id, status);
+    showToast(`${status}로 변경했습니다.`);
+    await Promise.all([renderToday(), renderArchive()]);
+  } catch (error) {
+    console.error(error);
+    showToast(actionErrorMessage(error), "error");
+    setBusy(button, false);
+  }
 }
 
 async function renderArchive() {
@@ -419,7 +437,7 @@ function bindEvents() {
   $("#todayCandidates")?.addEventListener("click", async (event) => {
     const approve = event.target.closest("[data-approve]");
     const use = event.target.closest("[data-use]");
-    if (approve) await setCurationStatus(approve.dataset.approve, "Approved");
+    if (approve) await setCurationStatus(approve.dataset.approve, "Approved", approve);
     if (use) await useArchive(use.dataset.use);
   });
   $("#sourceList")?.addEventListener("click", async (event) => {
@@ -447,7 +465,7 @@ function bindEvents() {
     const status = event.target.closest("[data-status]");
     if (use) await useArchive(use.dataset.use);
     if (del) await deleteArchive(del.dataset.delete);
-    if (status) await setCurationStatus(status.dataset.status, status.dataset.value);
+    if (status) await setCurationStatus(status.dataset.status, status.dataset.value, status);
   });
   $("#deckEditor").addEventListener("input", (event) => {
     const titleField = event.target.closest("[data-card-title]");

@@ -94,6 +94,12 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .rs-has-image{background-size:cover;background-position:center;color:#fff}
 .rs-has-image .rs-index,.rs-has-image .rs-title,.rs-has-image .rs-copy,.rs-has-image .rs-footer{color:#fff;text-shadow:0 1px 18px rgba(0,0,0,.45)}
 .rs-has-image.rs-side:before,.rs-has-image.rs-side:after{display:none}
+.rs-photo-slide{background:#d8d6cf center/cover no-repeat;color:#fff}
+.rs-photo-slide:after{content:"";position:absolute;inset:38% 0 0;background:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.18) 28%,rgba(0,0,0,.82) 100%);pointer-events:none}
+.rs-photo-placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#77756f;font-size:13px;letter-spacing:.08em}
+.rs-photo-copy{position:absolute;z-index:1;left:28px;right:28px;bottom:28px;display:grid;gap:10px;text-shadow:0 1px 16px rgba(0,0,0,.55)}
+.rs-photo-title{font-family:Arial,sans-serif;font-size:18px;line-height:1.25;font-weight:700;color:#fff;word-break:keep-all}
+.rs-photo-body{font-size:10.5px;line-height:1.68;font-weight:400;color:rgba(255,255,255,.92);white-space:pre-wrap;word-break:keep-all}
 .rs-cover{background:#2c2c2a;color:#f1efe8;padding:44px 40px 52px;display:flex;flex-direction:column;justify-content:flex-end}
 .rs-logo{position:absolute;top:32px;right:36px;font-family:Georgia,serif;font-size:12px;letter-spacing:.16em;color:rgba(211,209,199,.58)}
 .rs-eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:20px}

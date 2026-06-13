@@ -2076,6 +2076,7 @@ async function callOpenAICreateDeck(input, revision = null) {
             "Detail 2 (slide 5): give useful specifics a friend would mention after visiting, such as layout, material, menu, reservation, price, timing, route, or one easily missed detail.",
             "Editor's Note (slide 6): write a warm, specific reason Kevin would save or recommend this find. It should sound like a real message to a friend, not an evaluation report.",
             "Slides 4-6 must each add different information. Never repeat the Introduction or the angle.",
+            "Slides 2-6 are placed as small text at the bottom of a full-bleed photo. Keep each title to one short line and each copy to 2-3 compact sentences. Do not fill the image with text.",
             "Create a sense of firsthand attention, not a false firsthand claim. Never say '가봤다', '직접 보니', '먹어보니', or invent feelings unless the input explicitly says Kevin visited or used it.",
             "When direct personal notes are present, preserve their plain vocabulary and small details instead of replacing them with editorial language.",
             "CTA: ask exactly one answerable, topic-specific question. Never write '저장해두세요' or '여러분은 어떻게 생각하시나요?'.",

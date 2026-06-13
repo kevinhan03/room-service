@@ -139,10 +139,23 @@ export function renderPreviewDeck(deck, format, topic) {
     const imageStyle = imageUrl
       ? ` style="background-image:linear-gradient(rgba(24,24,22,.18),rgba(24,24,22,.56)),url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
       : "";
+    const photoImageStyle = imageUrl
+      ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
+      : "";
     const imageClass = imageUrl ? " rs-has-image" : "";
     const number = String(index + 1).padStart(2, "0");
     if (index === 0) {
       return `<article class="rs-slide rs-cover${imageClass}"${imageStyle}><span class="rs-logo">dig.everyday</span><div class="rs-eyebrow"><span class="rs-bar"></span><span class="rs-eyebrow-text">${safeText(format)}</span></div><h3 class="rs-cover-title">${safeTopic}</h3><p class="rs-cover-copy">${copy}</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+    }
+    if (index < deck.length - 1) {
+      return `<article class="rs-slide rs-photo-slide${imageClass}"${photoImageStyle}>
+        ${imageUrl ? "" : `<div class="rs-photo-placeholder">사진을 추가하세요</div>`}
+        <div class="rs-photo-copy">
+          <h3 class="rs-photo-title">${title}</h3>
+          <p class="rs-photo-body">${copy}</p>
+        </div>
+        <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
+      </article>`;
     }
     const sideClass = index % 2 === 0 ? " rs-side" : "";
     return `<article class="rs-slide rs-text${sideClass}${imageClass}"${imageStyle}><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;

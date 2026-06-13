@@ -3,21 +3,12 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 300
-    },
-    "api/cron.js": {
-      "maxDuration": 300
     }
   },
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "/api/index?__path=:path*"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "0 22 * * *"
     }
   ]
 }

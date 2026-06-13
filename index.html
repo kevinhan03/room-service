@@ -76,8 +76,8 @@
         </div></div>
         <div class="panel span-12 stack">
           <div class="section-head" style="margin-bottom:4px">
-            <div><p class="kicker" style="margin-bottom:6px">Automatic Sources</p><h2>Saved Feeds</h2></div>
-            <p>사이트 또는 RSS 주소를 미리 저장한다. 매일 오전 7시에 자동 수집하고 AI가 후보를 선별한다.</p>
+            <div><p class="kicker" style="margin-bottom:6px">Manual Collection</p><h2>Saved Feeds</h2></div>
+            <p>사이트 또는 RSS 주소를 저장하고, 필요할 때 버튼을 눌러 기사 수집과 AI 선별을 시작한다.</p>
           </div>
           <div class="grid">
             <label class="span-5"><span class="label">Feed Name</span><input id="rssName" class="field" type="text" placeholder="예: EYESMAG, Dezeen, Monocle"></label>
@@ -94,7 +94,7 @@
   </section>
 
   <section class="section" id="section-inbox">
-    <div class="inner"><div class="section-head"><div><p class="kicker">Inbox</p><h2>Collected Candidates</h2></div><p>매일 자동 수집된 Daily Find 후보를 확인하는 수집함이다.</p></div><div class="panel"><div class="empty">오전 7시 자동 수집 결과는 Today와 Board에 준비된다.</div></div></div>
+    <div class="inner"><div class="section-head"><div><p class="kicker">Inbox</p><h2>Collected Candidates</h2></div><p>Sources에서 직접 수집한 Daily Find 후보를 확인하는 수집함이다.</p></div><div class="panel"><div class="empty">수집 버튼을 실행한 결과는 Today와 Board에 준비된다.</div></div></div>
   </section>
 
   <section class="section" id="section-kevin">
@@ -176,7 +176,7 @@
 
 <dialog id="sourceWarningDialog" class="warning-dialog">
   <div class="warning-dialog-head">
-    <div><p class="kicker">Source Warning</p><h2>이 사이트는 자동 수집할 수 없습니다</h2></div>
+    <div><p class="kicker">Source Warning</p><h2>이 사이트에서는 기사를 수집할 수 없습니다</h2></div>
     <button id="closeSourceWarning" class="mini-btn" type="button" aria-label="닫기">닫기</button>
   </div>
   <p id="sourceWarningMessage" class="warning-dialog-message"></p>

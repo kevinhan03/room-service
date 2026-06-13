@@ -44,7 +44,7 @@ function showSourceWarning(error) {
   const dialog = $("#sourceWarningDialog");
   const message = $("#sourceWarningMessage");
   if (!dialog || !message) return;
-  message.textContent = error?.message || "이 사이트의 자동 수집 호환성을 확인하지 못했습니다.";
+  message.textContent = error?.message || "이 사이트의 기사 수집 호환성을 확인하지 못했습니다.";
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
 }
@@ -129,28 +129,28 @@ async function renderToday() {
   try {
     const result = await loadToday();
     renderTodayItems(result.items || []);
-    if ($("#todaySchedule")) $("#todaySchedule").textContent = `매일 ${result.schedule?.time || "07:00"} (${result.schedule?.timezone || "Asia/Seoul"}) 자동 수집`;
+    if ($("#todaySchedule")) $("#todaySchedule").textContent = "Sources에서 수집 버튼을 누르면 후보가 업데이트됩니다.";
   } catch (error) {
     console.error(error);
     if (target) target.innerHTML = `<div class="empty">Today 후보를 불러오지 못했습니다. ${safeText(error.message)}</div>`;
   }
 }
 
-function renderSourceItems(sources, schedule) {
+function renderSourceItems(sources, collection) {
   const target = $("#sourceList");
   if (!target) return;
   if (!sources?.length) {
-    target.innerHTML = `<div class="empty">저장된 자동 수집 소스가 없습니다.</div>`;
+    target.innerHTML = `<div class="empty">저장된 수집 소스가 없습니다.</div>`;
     return;
   }
-  target.innerHTML = sources.map((source) => `<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(source.name)}</p><p class="archive-meta">${source.is_active ? "Auto on" : "Paused"} / 마지막 수집 ${safeText(source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString("ko-KR") : "없음")}</p></div><div class="archive-actions"><button class="mini-btn" data-run-source="${safeText(source.id)}" type="button">지금 수집</button><button class="mini-btn" data-toggle-source="${safeText(source.id)}" data-active="${source.is_active}" type="button">${source.is_active ? "중지" : "재개"}</button><button class="mini-btn" data-delete-source="${safeText(source.id)}" type="button">삭제</button></div></div><p class="small">${safeText(source.url)}</p></article>`).join("");
-  if ($("#rssStatus") && schedule) $("#rssStatus").textContent = `자동 수집 ${schedule.time} / ${schedule.timezone} / 소스당 최대 ${schedule.limit}개`;
+  target.innerHTML = sources.map((source) => `<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(source.name)}</p><p class="archive-meta">${source.is_active ? "수집 대상" : "제외됨"} / 마지막 수집 ${safeText(source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString("ko-KR") : "없음")}</p></div><div class="archive-actions"><button class="mini-btn" data-run-source="${safeText(source.id)}" type="button">지금 수집</button><button class="mini-btn" data-toggle-source="${safeText(source.id)}" data-active="${source.is_active}" type="button">${source.is_active ? "전체 수집에서 제외" : "전체 수집에 포함"}</button><button class="mini-btn" data-delete-source="${safeText(source.id)}" type="button">삭제</button></div></div><p class="small">${safeText(source.url)}</p></article>`).join("");
+  if ($("#rssStatus") && collection) $("#rssStatus").textContent = `버튼 실행 시 소스당 최대 ${collection.limit}개를 수집합니다.`;
 }
 
 async function renderSources() {
   try {
     const result = await loadSources();
-    renderSourceItems(result.sources || [], result.schedule);
+    renderSourceItems(result.sources || [], result.collection);
   } catch (error) {
     console.error(error);
     if ($("#sourceList")) $("#sourceList").innerHTML = `<div class="empty">Sources를 불러오지 못했습니다. ${safeText(error.message)}</div>`;
@@ -433,7 +433,7 @@ async function saveAutomaticSource() {
   setBusy(button, true, "저장 중...");
   try {
     await createSource({ name, url, isActive: true });
-    $("#rssStatus").textContent = "자동 수집 소스로 저장했습니다.";
+    $("#rssStatus").textContent = "수집 소스로 저장했습니다. 수집은 버튼을 눌렀을 때만 시작됩니다.";
     await renderSources();
   } catch (error) {
     console.error(error);
@@ -553,7 +553,7 @@ async function renderCollectionRuns() {
   try {
     const runs = await loadCollectionRuns();
     if (!runs.length) {
-      target.innerHTML = '<div class="empty">아직 자동 수집 기록이 없습니다.</div>';
+      target.innerHTML = '<div class="empty">아직 수동 수집 기록이 없습니다.</div>';
       return;
     }
     target.innerHTML = runs.map((run) => {
@@ -562,7 +562,7 @@ async function renderCollectionRuns() {
         .map((item) => `<div class="operation-source"><span>${safeText(item.source_name || "Source")}</span><span>${safeText(item.status || "unknown")} · 신규 ${Number(item.imported_count || 0)} · 실패 ${Number(item.failed_count || 0)}</span></div>`)
         .join("");
       return `<article class="operation-run">
-        <div class="operation-head"><div><strong>${safeText(["vercel-cron", "schedule", "startup-catchup"].includes(run.trigger) ? "Daily 07:00" : "Manual collection")}</strong><p>${formatDateTime(run.started_at)}</p></div><span class="status-badge ${run.status === "completed" ? "saved" : run.status === "failed" ? "rejected" : "dig-more"}">${safeText(run.status || "running")}</span></div>
+        <div class="operation-head"><div><strong>Manual collection</strong><p>${formatDateTime(run.started_at)}</p></div><span class="status-badge ${run.status === "completed" ? "saved" : run.status === "failed" ? "rejected" : "dig-more"}">${safeText(run.status || "running")}</span></div>
         <div class="operation-summary"><span>Sources <strong>${Number(run.source_count || 0)}</strong></span><span>Imported <strong>${Number(run.imported_count || 0)}</strong></span><span>Skipped <strong>${Number(run.skipped_count || 0)}</strong></span><span>Failed <strong>${Number(run.failed_count || 0)}</strong></span></div>
         ${sourceRuns ? `<details><summary>소스별 결과</summary><div class="operation-sources">${sourceRuns}</div></details>` : ""}
       </article>`;

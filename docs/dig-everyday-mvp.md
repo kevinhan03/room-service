@@ -145,25 +145,20 @@ Required output:
 - `Builder`: seven-slide post editor.
 - `Export`: PNG/caption/credit preparation.
 
-## Automatic Daily Collection
+## Manual Collection
 
 - Save multiple RSS feeds or editorial website URLs in `Sources`.
-- Vercel Cron calls `/api/cron` every day at `22:00 UTC`, which is `07:00` the next day in `Asia/Seoul`.
-- A locally running server also checks active sources every day at `07:00` in `Asia/Seoul`.
-- If the server starts after 07:00 and a source has not run that day, it performs a startup catch-up collection.
+- Collection starts only when the user clicks `Run All Sources`, a source-level `Run Now`, or `Save + Collect Now`.
 - RSS/Atom is preferred. Normal websites use a basic same-domain article-link crawler and Open Graph metadata fallback.
 - Existing content URLs and existing curation rows are skipped before AI analysis to prevent duplicate cost and duplicate Board items.
 - New items are analyzed, scored, and saved to Today/Board.
-- Once the Vercel deployment and Production environment variables are updated, collection runs while the Mac is off.
-- On Vercel Hobby, a daily cron can start at any point within the scheduled hour, so the practical collection window is `07:00-07:59 KST`.
+- Saving a source alone does not fetch articles or incur AI cost.
 
 Environment controls:
 
 ```env
-AUTO_COLLECT_TIME=07:00
 AUTO_COLLECT_TIMEZONE=Asia/Seoul
 AUTO_COLLECT_LIMIT=5
-CRON_SECRET=use-a-long-random-value
 ```
 
 The Vercel Production environment must also include the Supabase, OpenAI, and Perplexity variables used by the local `.env.local` file. Local environment files are intentionally not committed or uploaded.

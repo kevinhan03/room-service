@@ -15,10 +15,8 @@ const openaiModel = env.OPENAI_MODEL || "gpt-4.1-mini";
 const perplexityModel = env.PERPLEXITY_MODEL || "sonar-deep-research";
 const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.co";
 const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
-const autoCollectTime = env.AUTO_COLLECT_TIME || "07:00";
 const autoCollectTimezone = env.AUTO_COLLECT_TIMEZONE || "Asia/Seoul";
 const autoCollectLimit = Math.max(1, Math.min(Number(env.AUTO_COLLECT_LIMIT) || 5, 8));
-let lastScheduledCollectionDate = "";
 let collectionRunning = false;
 
 class AppError extends Error {
@@ -962,7 +960,7 @@ async function runAllSources(trigger = "manual") {
 async function handleListSources(req, res) {
   try {
     const rows = await supabaseRequest("sources?select=*&order=created_at.desc", { method: "GET", headers: { Prefer: "" } });
-    sendJson(res, 200, { sources: rows || [], schedule: { time: autoCollectTime, timezone: autoCollectTimezone, limit: autoCollectLimit } });
+    sendJson(res, 200, { sources: rows || [], collection: { mode: "manual", limit: autoCollectLimit } });
   } catch (error) {
     sendError(res, error);
   }
@@ -1053,35 +1051,6 @@ function getZonedParts(date = new Date()) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
-async function schedulerTick() {
-  const now = getZonedParts();
-  if (now.time !== autoCollectTime || lastScheduledCollectionDate === now.date) return;
-  lastScheduledCollectionDate = now.date;
-  log("info", "scheduled collection started", { date: now.date, time: now.time, timezone: autoCollectTimezone });
-  const summary = await runAllSources("schedule");
-  log("info", "scheduled collection completed", { date: now.date, sources: summary.sources, imported: summary.imported, skipped: summary.skipped, failed: summary.failed });
-}
-
-async function runStartupCatchup() {
-  const now = getZonedParts();
-  if (now.time < autoCollectTime || lastScheduledCollectionDate === now.date) return;
-  const sources = await listActiveSources();
-  const needsCollection = sources.some((source) => !source.last_fetched_at || getZonedParts(new Date(source.last_fetched_at)).date !== now.date);
-  if (!needsCollection) {
-    lastScheduledCollectionDate = now.date;
-    return;
-  }
-  lastScheduledCollectionDate = now.date;
-  log("info", "startup catch-up collection started", { date: now.date, timezone: autoCollectTimezone });
-  const summary = await runAllSources("startup-catchup");
-  log("info", "startup catch-up collection completed", { date: now.date, sources: summary.sources, imported: summary.imported, skipped: summary.skipped, failed: summary.failed });
-}
-
-function startCollectionScheduler() {
-  setInterval(() => schedulerTick().catch((error) => log("error", "scheduled collection failed", { details: error.message })), 30_000);
-  runStartupCatchup().catch((error) => log("error", "scheduler startup check failed", { details: error.message }));
-}
-
 async function handleCollectionRuns(req, res) {
   try {
     const rows = await supabaseRequest("collection_runs?select=*,source_collection_runs(*)&order=started_at.desc&limit=20", { method: "GET", headers: { Prefer: "" } });
@@ -1111,7 +1080,7 @@ async function handleTodayRecommendations(req, res) {
           .sort((a, b) => a.rank - b.rank)
           .map((entry) => ({ ...normalizeBoardRow(entry.curation_items), finalScore: Number(entry.final_score), rank: entry.rank }))
           .filter((item) => item.status === "Candidate" && item.humanDecision !== "rejected");
-        sendJson(res, 200, { items, snapshotId: snapshot.id, generatedAt: snapshot.generated_at, isSnapshot: true, schedule: { time: autoCollectTime, timezone: autoCollectTimezone } });
+        sendJson(res, 200, { items, snapshotId: snapshot.id, generatedAt: snapshot.generated_at, isSnapshot: true, collection: { mode: "manual" } });
         return;
       }
       await supabaseRequest(`recommendation_snapshots?id=eq.${encodeURIComponent(snapshot.id)}`, { method: "DELETE", headers: { Prefer: "" } });
@@ -1133,7 +1102,7 @@ async function handleTodayRecommendations(req, res) {
         snapshotId: null,
         generatedAt: recommendedAt,
         isSnapshot: false,
-        schedule: { time: autoCollectTime, timezone: autoCollectTimezone }
+        collection: { mode: "manual" }
       });
       return;
     }
@@ -1162,7 +1131,7 @@ async function handleTodayRecommendations(req, res) {
       snapshotId: snapshot?.id || null,
       generatedAt: recommendedAt,
       isSnapshot: true,
-      schedule: { time: autoCollectTime, timezone: autoCollectTimezone }
+      collection: { mode: "manual" }
     });
   } catch (error) {
     sendError(res, error);
@@ -1931,13 +1900,11 @@ if (require.main === module) {
       openaiModel,
       perplexityModel,
       apiTimeoutMs,
-      autoCollectTime,
       autoCollectTimezone,
       autoCollectLimit,
       openaiResponsesUrl,
       perplexitySonarUrl
     });
-    startCollectionScheduler();
   });
 }
 

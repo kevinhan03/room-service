@@ -517,6 +517,52 @@ async function fetchRssItems(feedUrl) {
   return items;
 }
 
+function isEyesMagUrl(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "eyesmag.com" || hostname === "www.eyesmag.com";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchEyesMagItems(siteUrl, limit) {
+  const baseUrl = new URL(siteUrl);
+  const apiUrl = new URL("/api/v1/posts", baseUrl);
+  apiUrl.searchParams.set("page", "1");
+  apiUrl.searchParams.set("limit", String(Math.max(1, Math.min(Number(limit) || autoCollectLimit, 8))));
+  const response = await fetchWithTimeout(apiUrl.toString(), {
+    headers: {
+      "User-Agent": "dig.everyday source collector/0.1",
+      Accept: "application/json"
+    }
+  }, "EYESMAG API");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`EYESMAG API failed with status ${response.status}.`, 502, "RSS_FETCH_ERROR", text.slice(0, 500));
+  }
+  const data = parseJsonResponse(text, "EYESMAG API");
+  const items = Array.isArray(data.items) ? data.items : [];
+  return items.map((item) => {
+    const id = Number(item.id);
+    const slug = cleanString(item.name);
+    const title = stripHtml(item.title);
+    if (!Number.isFinite(id) || !slug || !title) return null;
+    const category = Array.isArray(item.categories)
+      ? item.categories.map((entry) => cleanString(entry?.name)).filter(Boolean).join(", ")
+      : "";
+    const tags = Array.isArray(item.tags) ? item.tags.map(cleanString).filter(Boolean).join(", ") : "";
+    const context = [stripHtml(item.excerpt), category && `카테고리: ${category}`, tags && `태그: ${tags}`].filter(Boolean).join(" / ");
+    return {
+      title,
+      url: new URL(`/posts/${id}/${encodeURIComponent(slug)}`, baseUrl).toString(),
+      rawExcerpt: context.slice(0, 1200),
+      imageUrl: item.thumbnail ? new URL(cleanString(item.thumbnail), "https://cdn.eyesmag.com/").toString() : "",
+      publishedAt: parseFeedDate(item.publishedAt)
+    };
+  }).filter(Boolean);
+}
+
 function normalizeScore(value) {
   const score = Number(value);
   if (!Number.isFinite(score)) return null;
@@ -662,7 +708,9 @@ async function validateSourceCompatibility(definition) {
     if (!items.length) throw new AppError("RSS feed contains no readable entries.", 422, "SOURCE_UNSUPPORTED", definition.url);
     return { type: "rss", readableItems: items.length };
   }
-  const items = await fetchWebItems(definition.url, 1);
+  const items = isEyesMagUrl(definition.url)
+    ? await fetchEyesMagItems(definition.url, 1)
+    : await fetchWebItems(definition.url, 1);
   if (!items.length) throw new AppError("Website contains no readable article links.", 422, "SOURCE_UNSUPPORTED", definition.url);
   return { type: "url", readableItems: items.length };
 }
@@ -747,6 +795,7 @@ async function fetchWebItems(siteUrl, limit) {
 }
 
 async function fetchSourceItems(source, limit) {
+  if (isEyesMagUrl(source.url)) return fetchEyesMagItems(source.url, limit);
   if (source.type === "url") return fetchWebItems(source.url, limit);
   return (await fetchRssItems(source.url)).slice(0, limit);
 }
@@ -924,7 +973,7 @@ async function handleCreateSource(req, res) {
     const body = await readBody(req);
     const url = validateUrl(cleanString(body.url));
     const name = cleanString(body.name, slugFromUrl(url));
-    const category = cleanString(body.category, "Space");
+    const category = cleanString(body.category, "Magazine");
     if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
     const source = await saveSource({ name, url, category, isActive: body.isActive !== false });
     sendJson(res, 200, { source });
@@ -938,7 +987,7 @@ async function handleImportRss(req, res) {
     const body = await readBody(req);
     const url = validateUrl(cleanString(body.url));
     const name = cleanString(body.name, slugFromUrl(url));
-    const category = cleanString(body.category, "Space");
+    const category = cleanString(body.category, "Magazine");
     const limit = Math.max(1, Math.min(Number(body.limit) || autoCollectLimit, 8));
     if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
     const source = await saveSource({ name, url, category, isActive: true });

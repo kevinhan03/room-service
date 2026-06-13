@@ -143,7 +143,7 @@ function renderSourceItems(sources, schedule) {
     target.innerHTML = `<div class="empty">저장된 자동 수집 소스가 없습니다.</div>`;
     return;
   }
-  target.innerHTML = sources.map((source) => `<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(source.name)}</p><p class="archive-meta">${safeText(source.category || "")} / ${source.is_active ? "Auto on" : "Paused"} / 마지막 수집 ${safeText(source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString("ko-KR") : "없음")}</p></div><div class="archive-actions"><button class="mini-btn" data-run-source="${safeText(source.id)}" type="button">지금 수집</button><button class="mini-btn" data-toggle-source="${safeText(source.id)}" data-active="${source.is_active}" type="button">${source.is_active ? "중지" : "재개"}</button><button class="mini-btn" data-delete-source="${safeText(source.id)}" type="button">삭제</button></div></div><p class="small">${safeText(source.url)}</p></article>`).join("");
+  target.innerHTML = sources.map((source) => `<article class="archive-item"><div class="archive-top"><div><p class="archive-title">${safeText(source.name)}</p><p class="archive-meta">${source.is_active ? "Auto on" : "Paused"} / 마지막 수집 ${safeText(source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString("ko-KR") : "없음")}</p></div><div class="archive-actions"><button class="mini-btn" data-run-source="${safeText(source.id)}" type="button">지금 수집</button><button class="mini-btn" data-toggle-source="${safeText(source.id)}" data-active="${source.is_active}" type="button">${source.is_active ? "중지" : "재개"}</button><button class="mini-btn" data-delete-source="${safeText(source.id)}" type="button">삭제</button></div></div><p class="small">${safeText(source.url)}</p></article>`).join("");
   if ($("#rssStatus") && schedule) $("#rssStatus").textContent = `자동 수집 ${schedule.time} / ${schedule.timezone} / 소스당 최대 ${schedule.limit}개`;
 }
 
@@ -402,7 +402,6 @@ async function importRss() {
   const button = $("#importRss");
   const name = $("#rssName").value.trim();
   const url = $("#rssUrl").value.trim();
-  const category = $("#rssCategory").value;
   if (!url) {
     $("#rssStatus").textContent = "RSS URL을 입력해 주세요.";
     return;
@@ -410,7 +409,7 @@ async function importRss() {
   $("#rssStatus").textContent = "RSS 수집과 AI 선별 중...";
   setBusy(button, true, "가져오는 중...");
   try {
-    const result = await importRssFeed({ name, url, category, limit: 5 });
+    const result = await importRssFeed({ name, url, limit: 5 });
     renderRssResult(result.items || []);
     $("#rssStatus").textContent = `신규 ${result.imported || 0}개 / 중복 ${result.skipped || 0}개 / 실패 ${result.failed || 0}개`;
     await Promise.all([renderSources(), renderToday(), renderArchive()]);
@@ -427,14 +426,13 @@ async function saveAutomaticSource() {
   const button = $("#saveSource");
   const name = $("#rssName").value.trim();
   const url = $("#rssUrl").value.trim();
-  const category = $("#rssCategory").value;
   if (!url) {
     $("#rssStatus").textContent = "사이트 또는 RSS URL을 입력해 주세요.";
     return;
   }
   setBusy(button, true, "저장 중...");
   try {
-    await createSource({ name, url, category, isActive: true });
+    await createSource({ name, url, isActive: true });
     $("#rssStatus").textContent = "자동 수집 소스로 저장했습니다.";
     await renderSources();
   } catch (error) {

@@ -81,8 +81,9 @@
             <p>사이트 또는 RSS 주소를 저장하고, 필요할 때 버튼을 눌러 기사 수집과 AI 선별을 시작한다.</p>
           </div>
           <div class="grid">
-            <label class="span-5"><span class="label">Feed Name</span><input id="rssName" class="field" type="text" placeholder="예: EYESMAG, Dezeen, Monocle"></label>
-            <label class="span-7"><span class="label">Site or RSS URL</span><input id="rssUrl" class="field" type="url" placeholder="https://example.com 또는 /feed.xml"></label>
+            <label class="span-4"><span class="label">Source Name</span><input id="rssName" class="field" type="text" placeholder="예: EYESMAG, Aesop Journal"></label>
+            <label class="span-3"><span class="label">Source Type</span><select id="rssSourceType" class="select"><option value="Magazine">Magazine</option><option value="Brand">Brand</option></select></label>
+            <label class="span-5"><span class="label">Site or RSS URL</span><input id="rssUrl" class="field" type="url" placeholder="https://example.com 또는 /feed.xml"></label>
           </div>
           <div class="inline"><button id="saveSource" class="btn" type="button">소스 저장</button><button id="importRss" class="btn secondary" type="button">저장 + 지금 수집</button><button id="runAllSources" class="btn ghost" type="button">전체 지금 수집</button><p id="rssStatus" class="status-line"></p></div>
           <div id="sourceList" class="archive-list"></div>

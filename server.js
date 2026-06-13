@@ -30,6 +30,7 @@ class AppError extends Error {
 }
 
 const categories = new Set(["Fashion", "Space", "Food", "Travel", "Hotel", "Object", "Perfume", "Architecture", "Product", "Brand", "Book", "Magazine", "Artwork", "Playlist", "Restaurant", "Cafe", "Store", "Exhibition"]);
+const sourceTypes = new Set(["Magazine", "Brand", "Kevin"]);
 
 function loadEnv(filePath) {
   const values = { ...process.env };
@@ -374,6 +375,7 @@ function normalizeBoardRow(row) {
     title: displayTitle,
     sourceUrl: source.url || "",
     sourceName: decodeXml(source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type)),
+    sourceKind: row.item_type === "kevin_found" ? "Kevin" : cleanString(source.source_type, "Magazine"),
     category: analysis?.category || source.category || "Space",
     notes: decodeXml(source.raw_content || source.notes || ""),
     angle: decodeXml(analysis?.editorial_angle || row.editor_note || ""),
@@ -822,20 +824,20 @@ async function validateSourceCompatibility(definition) {
   return { type: "url", readableItems: items.length };
 }
 
-async function saveSource({ name, url, category, isActive = true }) {
+async function saveSource({ name, url, category, sourceType = "Magazine", isActive = true }) {
   const definition = await resolveSourceDefinition(url);
   await validateSourceCompatibility(definition);
   const existing = await findSourceByUrl(definition.url);
   if (existing) {
     const rows = await supabaseRequest(`sources?id=eq.${encodeURIComponent(existing.id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ name, category, is_active: isActive })
+      body: JSON.stringify({ name, category, source_type: sourceType, is_active: isActive })
     });
     return rows?.[0] || existing;
   }
   const rows = await supabaseRequest("sources", {
     method: "POST",
-    body: JSON.stringify({ type: definition.type, name, url: definition.url, category, is_active: isActive })
+    body: JSON.stringify({ type: definition.type, source_type: sourceType, name, url: definition.url, category, is_active: isActive })
   });
   return rows?.[0];
 }
@@ -937,7 +939,7 @@ async function collectSource(source, limit = autoCollectLimit) {
           method: "POST",
           body: JSON.stringify({
             source_id: source.id,
-            source_type: source.type,
+            source_type: cleanString(source.source_type, "Magazine"),
             title: item.title,
             url: item.url,
             image_url: item.imageUrl,
@@ -954,7 +956,11 @@ async function collectSource(source, limit = autoCollectLimit) {
       }
       if (!contentItem?.id) throw new AppError("content_items insert returned no id.", 502, "SUPABASE_API_ERROR");
 
-      const analysis = normalizeAnalysisForDb(await callOpenAIRssAnalysis({ name: source.name, url: source.url }, item, source.category, dislikeProfile), source.category);
+      const analysis = normalizeAnalysisForDb(await callOpenAIRssAnalysis({
+        name: source.name,
+        url: source.url,
+        sourceType: cleanString(source.source_type, "Magazine")
+      }, item, source.category, dislikeProfile), source.category);
       const analysisRows = await supabaseRequest("ai_analyses", {
         method: "POST",
         body: JSON.stringify({ item_type: "daily_find", content_item_id: contentItem.id, ...analysis })
@@ -1064,8 +1070,10 @@ async function handleCreateSource(req, res) {
     const url = validateUrl(cleanString(body.url));
     const name = cleanString(body.name, slugFromUrl(url));
     const category = cleanString(body.category, "Magazine");
+    const sourceType = cleanString(body.sourceType, "Magazine");
     if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
-    const source = await saveSource({ name, url, category, isActive: body.isActive !== false });
+    if (!sourceTypes.has(sourceType) || sourceType === "Kevin") throw new AppError("sourceType is not supported for collected sources.", 400, "INVALID_INPUT", sourceType);
+    const source = await saveSource({ name, url, category, sourceType, isActive: body.isActive !== false });
     sendJson(res, 200, { source });
   } catch (error) {
     sendError(res, error);
@@ -1078,9 +1086,11 @@ async function handleImportRss(req, res) {
     const url = validateUrl(cleanString(body.url));
     const name = cleanString(body.name, slugFromUrl(url));
     const category = cleanString(body.category, "Magazine");
+    const sourceType = cleanString(body.sourceType, "Magazine");
     const limit = Math.max(1, Math.min(Number(body.limit) || autoCollectLimit, 8));
     if (!categories.has(category)) throw new AppError("category is not supported.", 400, "INVALID_INPUT", category);
-    const source = await saveSource({ name, url, category, isActive: true });
+    if (!sourceTypes.has(sourceType) || sourceType === "Kevin") throw new AppError("sourceType is not supported for collected sources.", 400, "INVALID_INPUT", sourceType);
+    const source = await saveSource({ name, url, category, sourceType, isActive: true });
     const result = await collectSource(source, limit);
     sendJson(res, 200, result);
   } catch (error) {
@@ -1131,6 +1141,11 @@ async function handleUpdateSource(req, res, id) {
     if (typeof body.isActive === "boolean") patch.is_active = body.isActive;
     if (body.name !== undefined) patch.name = cleanString(body.name);
     if (body.category !== undefined) patch.category = cleanString(body.category);
+    if (body.sourceType !== undefined) {
+      const sourceType = cleanString(body.sourceType);
+      if (!sourceTypes.has(sourceType) || sourceType === "Kevin") throw new AppError("sourceType is not supported for collected sources.", 400, "INVALID_INPUT", sourceType);
+      patch.source_type = sourceType;
+    }
     const rows = await supabaseRequest(`sources?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
     sendJson(res, 200, { source: rows?.[0] || null });
   } catch (error) {
@@ -1315,6 +1330,7 @@ async function handleSaveDailyFind(req, res) {
       body: JSON.stringify({
         title,
         url: sourceUrl,
+        source_type: "Kevin",
         image_url: cleanString(brief.imageUrl),
         image_credit: cleanString(brief.imageCredit),
         image_source_url: cleanString(brief.imageSourceUrl || brief.sourceUrl),

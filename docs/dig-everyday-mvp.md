@@ -8,7 +8,7 @@ and offline.
 
 The MVP keeps the system small enough to run every day.
 
-- `Daily Find`: web/RSS/URL based discovery.
+- `Daily Find`: Magazine and Brand discovery through web/RSS/URL sources.
 - `Kevin Found Lite`: manual registration for things Kevin personally found.
 - `Analyze`: summary, classification, and taste evaluation in one user action.
 - `Create Post`: seven-slide copy and caption generation in one user action.
@@ -31,7 +31,10 @@ lives directly on `content_items`, `kevin_finds`, and `post_drafts`.
 
 ## Core Distinction
 
-- `content_items`: things discovered from the web.
+- `sources.type`: collection transport (`rss` or `url`).
+- `sources.source_type`: editorial source layer (`Magazine` or `Brand`).
+- `content_items.source_type`: persisted editorial source layer (`Magazine`, `Brand`, or `Kevin`).
+- `content_items`: things discovered from Magazine and Brand sources.
 - `kevin_finds`: things Kevin directly experienced or personally saved.
 - `ai_analyses`: the dig.everyday taste filter.
 - `curation_items`: editorial workflow state.
@@ -147,12 +150,19 @@ Required output:
 
 ## Manual Collection
 
-- Save multiple RSS feeds or editorial website URLs in `Sources`.
+- Save Magazine or Brand RSS feeds and website URLs in `Sources`.
 - Collection starts only when the user clicks `Run All Sources`, a source-level `Run Now`, or `Save + Collect Now`.
 - RSS/Atom is preferred. Normal websites use a basic same-domain article-link crawler and Open Graph metadata fallback.
 - Existing content URLs and existing curation rows are skipped before AI analysis to prevent duplicate cost and duplicate Board items.
 - New items are analyzed, scored, and saved to Today/Board.
 - Saving a source alone does not fetch articles or incur AI cost.
+
+## Source Layers
+
+- `Magazine` supplies broad discovery candidates and requires strong AI filtering.
+- `Brand` supplies first-party stories that often match dig.everyday before editorial coverage.
+- `Kevin` represents manually saved or personally experienced finds and is treated as the strongest ownership signal.
+- Source layers are stored now for filtering and future recommendation features. The MVP does not add a fixed layer bonus; explicit Kevin actions such as `Save Candidate` remain the stronger recommendation signal.
 
 Environment controls:
 

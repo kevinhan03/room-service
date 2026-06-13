@@ -88,6 +88,7 @@ export function renderArchiveItems(items) {
   }
   list.innerHTML = items.map((item) => {
     const type = item.itemType === "kevin_found" ? "Kevin Found" : "Daily Find";
+    const sourceKind = item.sourceKind || (item.itemType === "kevin_found" ? "Kevin" : "Magazine");
     const status = item.status || "Candidate";
     const sourceName = item.sourceName || item.source_name || type;
     const createdAt = item.createdAtLabel || item.created_at_label || "";
@@ -102,7 +103,7 @@ export function renderArchiveItems(items) {
     return `<article class="archive-item archive-editorial" data-item-id="${safeText(item.id)}">
       <div class="archive-image">${image}</div>
       <div class="archive-content">
-        <div class="archive-top"><div><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)}</p><h3 class="archive-title">${safeText(item.name || item.title)}</h3></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button>${sourceLink}<button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div>
+        <div class="archive-top"><div><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(sourceKind)} / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)}</p><h3 class="archive-title">${safeText(item.name || item.title)}</h3></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button>${sourceLink}<button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div>
         <p class="archive-summary">${safeText(summary)}</p>
         <div class="archive-score-row">${score("Suitability", item.suitabilityScore)}${score("Taste", item.tasteFitScore)}${score("Visual", item.visualScore)}${score("Story", item.storyScore)}</div>
         <div class="archive-angle"><span>Editorial angle</span><p>${safeText(angle)}</p></div>

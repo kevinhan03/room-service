@@ -1,6 +1,9 @@
 create table if not exists sources (
   id uuid primary key default gen_random_uuid(),
   type text not null check (type in ('rss', 'url', 'manual', 'social')),
+  source_type text not null default 'Magazine' check (
+    source_type in ('Magazine', 'Brand', 'Kevin')
+  ),
   name text not null,
   url text not null,
   category text,
@@ -12,7 +15,9 @@ create table if not exists sources (
 create table if not exists content_items (
   id uuid primary key default gen_random_uuid(),
   source_id uuid references sources(id) on delete set null,
-  source_type text not null default 'url',
+  source_type text not null default 'Magazine' check (
+    source_type in ('Magazine', 'Brand', 'Kevin')
+  ),
   title text not null,
   url text not null unique,
   canonical_url text,

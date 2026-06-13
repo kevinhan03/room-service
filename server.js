@@ -12,6 +12,7 @@ const apiTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs
 const openaiResponsesUrl = env.OPENAI_RESPONSES_URL || "https://api.openai.com/v1/responses";
 const perplexitySonarUrl = env.PERPLEXITY_SONAR_URL || "https://api.perplexity.ai/v1/sonar";
 const openaiModel = env.OPENAI_MODEL || "gpt-4.1-mini";
+const openaiWritingModel = env.OPENAI_WRITING_MODEL || "gpt-5.4";
 const perplexityModel = env.PERPLEXITY_MODEL || "sonar-pro";
 const perplexityDeepResearchModel = env.PERPLEXITY_DEEP_RESEARCH_MODEL || "sonar-deep-research";
 const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.co";
@@ -312,6 +313,55 @@ function validateDeckGenerated(generated) {
     creditNote: cleanString(generated.credit_note || generated.creditNote),
     sourceNote: cleanString(generated.source_note || generated.sourceNote)
   };
+}
+
+const unnaturalDeckPatterns = [
+  ["체류형", /체류형/g],
+  ["경험형", /경험형/g],
+  ["라이프스타일 공간", /라이프스타일\s*공간/g],
+  ["공간 경험", /공간\s*경험/g],
+  ["브랜드 태도", /브랜드의?\s*태도/g],
+  ["조명한다", /조명(?:한다|했다|하는)/g],
+  ["선사한다", /선사(?:한다|했다|하는)/g],
+  ["어우러진다", /어우러(?:진다|져|지는)/g],
+  ["돋보인다", /돋보/g],
+  ["주목한다", /주목(?:한다|할 만하다|해볼 만하다)/g],
+  ["단순한 것을 넘어", /단순(?:한|히).{0,20}(?:넘어|아니라)/g],
+  ["새로운 기준", /새로운\s*기준/g],
+  ["특별한 경험", /특별한\s*경험/g],
+  ["감각적인", /감각적(?:인|이다|으로)/g],
+  ["매력적", /매력적(?:인|이다|으로)/g],
+  ["좋은 곳", /좋은\s*곳/g],
+  ["다른 모습", /(?:전혀|완전히)?\s*다른\s*모습/g],
+  ["지루할 틈", /지루할\s*틈/g],
+  ["한층 더", /한층\s*더/g],
+  ["기분 전환", /기분\s*전환/g],
+  ["~하기 좋다", /(?:하기|보기|쉬기|머물기|즐기기)\s*좋/g],
+  ["자연스럽게", /자연스럽게/g],
+  ["흥미롭다", /흥미롭/g],
+  ["눈에 띈다", /눈에\s*띈/g],
+  ["편하게", /편하게/g],
+  ["꼭 확인", /꼭\s*확인/g],
+  ["다른 얼굴", /다른\s*얼굴/g],
+  ["~와 함께", /와\s*함께|과\s*함께/g],
+  ["곳곳에", /곳곳에/g],
+  ["시간을 보내다", /시간을\s*보내/g]
+];
+
+function deckNaturalnessIssues(deck) {
+  const text = [
+    ...deck.cards.flatMap((card) => [card.title, card.copy]),
+    deck.caption
+  ].join("\n");
+  const issues = unnaturalDeckPatterns
+    .filter(([, pattern]) => {
+      pattern.lastIndex = 0;
+      return pattern.test(text);
+    })
+    .map(([label]) => label);
+  const atmosphereCount = (text.match(/분위기/g) || []).length;
+  if (atmosphereCount >= 3) issues.push(`분위기 반복 ${atmosphereCount}회`);
+  return issues;
 }
 
 
@@ -1858,10 +1908,29 @@ async function callOpenAI(input, research) {
   return parseModelJson(getOpenAIText(data), "OpenAI");
 }
 
-async function callOpenAICreateDeck(input) {
+async function callOpenAICreateDeck(input, revision = null) {
   if (!env.OPENAI_API_KEY) {
     throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
   }
+
+  const assignment = revision
+    ? [
+        "Rewrite the draft below because it failed the natural Korean editorial voice check.",
+        `Detected expressions: ${revision.issues.join(", ")}`,
+        "This is the mandatory final human copy-edit pass. Do not preserve wording just because it passed the first draft.",
+        "Preserve only facts supported by the original input and the exact seven-slide structure.",
+        "Delete any detail that cannot be traced directly to the original input, even if it sounds plausible.",
+        "Do not merely swap synonyms. Replace abstractions with concrete scenes, actions, materials, prices, locations, history, or useful observations.",
+        "Read every sentence aloud in your head. Rewrite anything that sounds like a brochure, press release, translated English, AI summary, or generic travel account.",
+        "Remove evaluative filler. If a sentence only says something is good, interesting, comfortable, different, or memorable, replace it with the observable reason or delete it.",
+        "",
+        "Draft to rewrite:",
+        JSON.stringify(revision.draft, null, 2)
+      ]
+    : [
+        "Create an exact seven-slide Instagram carousel draft and caption.",
+        "Use this fixed slide structure in order: Cover, Introduction, Why It Matters, Detail 1, Detail 2, Editor's Note, CTA."
+      ];
 
   const response = await fetchWithTimeout(openaiResponsesUrl, {
     method: "POST",
@@ -1870,15 +1939,46 @@ async function callOpenAICreateDeck(input) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: openaiModel,
+      model: revision ? openaiWritingModel : openaiModel,
       input: [
         {
           role: "developer",
           content: [
             "You write for dig.everyday, a Korean editorial Instagram curation system.",
             "All user-facing text must be Korean, except proper nouns.",
-            "Tone: short, dry, dense with information.",
+            "Write like a Korean human editor who actually visited, used, or carefully researched the subject.",
+            "Tone: conversational but restrained, specific, and easy to read aloud.",
+            "Prefer ordinary Korean verbs and concrete nouns over editorial abstractions.",
+            "Each sentence should contain a fact, scene, useful detail, or clear personal observation.",
+            "Vary sentence length. Natural short fragments are allowed, but do not make every line a slogan.",
+            "Research notes are evidence, not a writing style. Never copy their abstract wording.",
+            "Avoid stacked nouns and translated English phrasing.",
+            "Do not use metaphors, personification, poetic travel writing, or scene-setting details that are not in the input.",
+            "Do not explain that something provides an experience. Describe what a person actually sees, does, hears, orders, or remembers.",
+            "Do not call something meaningful, attractive, sensory, special, or noteworthy without immediately saying why.",
+            "Never use these expressions or close variations: 체류형, 경험형, 라이프스타일 공간, 공간 경험, 브랜드 태도, 조명한다, 선사한다, 어우러진다, 돋보인다, 주목한다, 단순한 것을 넘어, 새로운 기준, 특별한 경험, 감각적인, 매력적, 좋은 곳, 전혀 다른 모습, 지루할 틈이 없다, 한층 더, 기분 전환, ~하기 좋다.",
+            "Avoid generic openings such as '~을 소개합니다', '~에 주목했습니다', and generic conclusions such as '~해볼 만합니다'.",
+            "Do not use rhetorical contrast templates like 'A가 아니라 B' unless the contrast is a verifiable fact.",
             "Forbidden: marketing copy, excessive adjectives, exclamation marks.",
+            "Do not add unsupported praise or adjectives such as 인기 있는, 깨끗한, 넓은, 편리한, 유명한, 따뜻한 unless that exact fact appears in the input.",
+            "Do not introduce a concrete noun, facility, seat type, sound, view, schedule, price rule, or action unless it is explicitly present in the input. Plausible is not the same as verified.",
+            "Forbidden examples unless explicitly supplied: 파도 소리, 라이브 공연, 무대, 카바나, 선베드, 선탠, 자리별 전망, 바닷바람, 음악이 커진다.",
+            "Use the word '분위기' no more than once in the entire output. Name the light, sound, material, crowd, view, or action instead.",
+            "Bad: '낮과 밤이 다른 체류형 공간으로 특별한 경험을 선사한다.'",
+            "Good: '낮에는 수영장과 해변을 오간다. 해가 지면 DJ가 음악을 튼다.'",
+            "Bad: '라탄과 목재가 어우러져 따뜻한 분위기를 만든다.'",
+            "Good: '천장에는 라탄 조명이 달렸고, 바와 테이블에는 재활용 목재를 썼다.'",
+            "Bad: '밤이 되면 바다가 다른 얼굴을 보여준다.'",
+            "Good: '해가 지면 DJ 음악과 공연이 시작된다.'",
+            "Do not invent first-person visits or feelings. Use first person only when the supplied notes explicitly contain Kevin's own observation.",
+            "Cover: one clean hook, not a grand claim.",
+            "Introduction: identify the subject plainly and include location or context when known.",
+            "Why It Matters: explain one concrete reason without saying '왜 중요한가'.",
+            "Detail slides: use the strongest specific facts. Do not repeat the angle.",
+            "Editor's Note: one honest editorial judgment in everyday Korean.",
+            "CTA: ask exactly one answerable, topic-specific question. Never write '저장해두세요' or '여러분은 어떻게 생각하시나요?'.",
+            "Caption: 3-5 short paragraphs that add context instead of repeating all seven cards.",
+            "Before returning JSON, silently audit every sentence: (1) supported by input, (2) concrete, (3) natural when read aloud, (4) not repeated elsewhere. Rewrite or delete any sentence that fails.",
             "Do not create a Source Note card.",
             "Return only valid JSON. No markdown."
           ].join("\n")
@@ -1886,8 +1986,7 @@ async function callOpenAICreateDeck(input) {
         {
           role: "user",
           content: [
-            "Create an exact seven-slide Instagram carousel draft and caption.",
-            "Use this fixed slide structure in order: Cover, Introduction, Why It Matters, Detail 1, Detail 2, Editor's Note, CTA.",
+            ...assignment,
             "JSON shape:",
             "{",
             "  \"cards\": [{\"title\": \"Cover\", \"copy\": \"1-3 short Korean lines\"}, {\"title\": \"Introduction\", \"copy\": \"...\"}, {\"title\": \"Why It Matters\", \"copy\": \"...\"}, {\"title\": \"Detail 1\", \"copy\": \"...\"}, {\"title\": \"Detail 2\", \"copy\": \"...\"}, {\"title\": \"Editor's Note\", \"copy\": \"...\"}, {\"title\": \"CTA\", \"copy\": \"...\"}],",
@@ -1970,8 +2069,36 @@ async function handleCreateDeck(req, res) {
   try {
     const body = await readBody(req);
     const input = validateDeckInput(body);
-    log("info", "deck request started", { route: "/api/create-deck", title: input.title, format: input.format });
-    const generated = validateDeckGenerated(await callOpenAICreateDeck(input));
+    log("info", "deck request started", {
+      route: "/api/create-deck",
+      title: input.title,
+      format: input.format,
+      draftModel: openaiModel,
+      writingModel: openaiWritingModel
+    });
+    const initialDraft = validateDeckGenerated(await callOpenAICreateDeck(input));
+    const naturalnessIssues = deckNaturalnessIssues(initialDraft);
+    log("info", "deck final copy edit started", {
+      route: "/api/create-deck",
+      title: input.title,
+      issues: naturalnessIssues
+    });
+    let generated = validateDeckGenerated(await callOpenAICreateDeck(input, {
+      draft: initialDraft,
+      issues: naturalnessIssues.length ? naturalnessIssues : ["mandatory final human copy edit"]
+    }));
+    const remainingIssues = deckNaturalnessIssues(generated);
+    if (remainingIssues.length) {
+      log("info", "deck final repair started", {
+        route: "/api/create-deck",
+        title: input.title,
+        issues: remainingIssues
+      });
+      generated = validateDeckGenerated(await callOpenAICreateDeck(input, {
+        draft: generated,
+        issues: remainingIssues
+      }));
+    }
 
     sendJson(res, 200, {
       cards: generated.cards,
@@ -1980,7 +2107,12 @@ async function handleCreateDeck(req, res) {
       creditNote: generated.creditNote || "",
       sourceNote: generated.sourceNote || ""
     });
-    log("info", "deck request completed", { route: "/api/create-deck", title: input.title, cardCount: generated.cards.length });
+    log("info", "deck request completed", {
+      route: "/api/create-deck",
+      title: input.title,
+      cardCount: generated.cards.length,
+      remainingNaturalnessIssues: deckNaturalnessIssues(generated)
+    });
   } catch (error) {
     sendError(res, error);
   }

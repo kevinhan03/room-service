@@ -130,6 +130,7 @@ function renderTodayItems(items) {
           <button class="mini-btn" data-decision="saved_candidate" data-id="${safeText(item.id)}" type="button">Save Candidate</button>
           <button class="mini-btn" data-decision="dig_more" data-id="${safeText(item.id)}" type="button">Dig More</button>
           <button class="mini-btn danger" data-decision="rejected" data-id="${safeText(item.id)}" type="button">Reject</button>
+          ${item.sourceUrl ? `<a class="mini-btn" href="${safeText(item.sourceUrl)}" target="_blank" rel="noreferrer">원문</a>` : ""}
         </div>
       </div>
     </article>`;

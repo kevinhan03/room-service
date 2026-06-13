@@ -918,10 +918,10 @@ async function drawSlidePng(card, index) {
     context.fillStyle = "rgba(0,0,0,.42)";
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#fff";
-    context.font = "700 64px Arial, sans-serif";
+    context.font = "700 50px Arial, sans-serif";
     context.textAlign = "center";
-    const ctaLines = wrapCanvasText(context, card[1], 880).slice(0, 4);
-    const lineHeight = 78;
+    const ctaLines = wrapCanvasText(context, card[1], 920).slice(0, 4);
+    const lineHeight = 62;
     let ctaY = (canvas.height - ctaLines.length * lineHeight) / 2;
     ctaLines.forEach((line) => {
       context.fillText(line, canvas.width / 2, ctaY);

@@ -322,6 +322,23 @@ function validateCards(cards) {
   });
 }
 
+function validateDraftCards(cards) {
+  if (!Array.isArray(cards)) {
+    throw new AppError("Cards must be an array.", 400, "INVALID_INPUT");
+  }
+  return cards.map((card, index) => {
+    const title = cleanString(card?.title);
+    const copy = cleanString(card?.copy);
+    assertMaxLength(title, 200, `cards[${index}].title`);
+    assertMaxLength(copy, 4000, `cards[${index}].copy`);
+    const imageUrl = cleanString(card?.imageUrl || card?.image_url);
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+      throw new AppError("Card image URL must use http or https.", 400, "INVALID_INPUT", `card index=${index}`);
+    }
+    return { title, copy, imageUrl };
+  });
+}
+
 function validateResearchGenerated(generated) {
   return {
     brief: generated.brief && typeof generated.brief === "object" ? generated.brief : {},
@@ -1629,7 +1646,7 @@ async function handleGetPostDraft(req, res, id) {
 async function handleUpdatePostDraft(req, res, id) {
   try {
     const body = await readBody(req);
-    const cards = validateCards(body.cards);
+    const cards = validateDraftCards(body.cards);
     if (cards.length !== 7) throw new AppError("Post draft must have exactly seven slides.", 400, "INVALID_INPUT");
     const allowedStatus = new Set(["Draft", "Editing", "Ready to Export", "Exported", "Published"]);
     const status = cleanString(body.status, "Editing");

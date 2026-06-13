@@ -130,22 +130,27 @@ export function renderDeckList(deck) {
   $("#deckList").innerHTML = deck.map((card, index) => `<div class="deck-card"><div class="deck-no">${index + 1}</div><div><p class="deck-title">${safeText(card[0])}</p><p class="deck-copy">${safeText(card[1])}</p></div></div>`).join("");
 }
 
-export function renderPreviewDeck(deck, format, topic) {
+export function renderPreviewDeck(deck, format, topic, category = "") {
   const safeTopic = safeText(topic || "dig.everyday");
+  const safeCategory = safeText(category || format || "Find");
   $("#previewDeck").innerHTML = deck.map((card, index) => {
     const title = safeText(card[0]);
     const copy = safeText(card[1]);
     const imageUrl = isWebUrl(card[2]) ? card[2] : "";
-    const imageStyle = imageUrl
-      ? ` style="background-image:linear-gradient(rgba(24,24,22,.18),rgba(24,24,22,.56)),url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
-      : "";
     const photoImageStyle = imageUrl
       ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
       : "";
     const imageClass = imageUrl ? " rs-has-image" : "";
     const number = String(index + 1).padStart(2, "0");
     if (index === 0) {
-      return `<article class="rs-slide rs-cover${imageClass}"${imageStyle}><span class="rs-logo">dig.everyday</span><div class="rs-eyebrow"><span class="rs-bar"></span><span class="rs-eyebrow-text">${safeText(format)}</span></div><h3 class="rs-cover-title">${safeTopic}</h3><p class="rs-cover-copy">${copy}</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+      return `<article class="rs-slide rs-cover-photo${imageClass}"${photoImageStyle}>
+        ${imageUrl ? "" : `<div class="rs-photo-placeholder">커버 사진을 추가하세요</div>`}
+        <div class="rs-cover-photo-copy">
+          <p class="rs-cover-meta"><span>${safeTopic}</span><span aria-hidden="true">·</span><span>${safeCategory}</span></p>
+          <h3 class="rs-cover-hook">${copy}</h3>
+        </div>
+        <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
+      </article>`;
     }
     if (index < deck.length - 1) {
       return `<article class="rs-slide rs-photo-slide${imageClass}"${photoImageStyle}>
@@ -180,9 +185,9 @@ export function renderDeckEditor(deck) {
   }).join("");
 }
 
-export function renderDeck(deck, format, topic) {
+export function renderDeck(deck, format, topic, category = "") {
   renderDeckList(deck);
-  renderPreviewDeck(deck, format, topic);
+  renderPreviewDeck(deck, format, topic, category);
   renderDeckEditor(deck);
 }
 

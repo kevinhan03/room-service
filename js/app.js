@@ -3,6 +3,7 @@ import { $, $$, isWebUrl, makeDefaultHook, prependArchiveMessage, renderArchiveI
 
 let currentFormat = "Check-in";
 let currentBrief = null;
+let currentPostCategory = "";
 let currentDeck = [];
 let currentCurationItemId = null;
 let currentSourceType = "daily_find";
@@ -45,6 +46,7 @@ function buildBrief() {
 
 function showBrief(brief) {
   currentBrief = brief;
+  currentPostCategory = brief.category || "";
   currentCurationItemId = brief.curationItemId || brief.id || currentCurationItemId;
   currentSourceType = brief.itemType || currentSourceType || "daily_find";
   renderBrief(brief);
@@ -310,8 +312,12 @@ function topic() {
   return $("#createTitle").value.trim() || currentBrief?.name || "dig.everyday";
 }
 
+function postCategory() {
+  return currentPostCategory || currentBrief?.category || $("#category")?.value || currentFormat;
+}
+
 function syncDeck() {
-  renderDeck(currentDeck, currentFormat, topic());
+  renderDeck(currentDeck, currentFormat, topic(), postCategory());
 }
 
 function buildFallbackDeck() {
@@ -354,7 +360,7 @@ async function buildDeck() {
       const savedDraft = await insertPostDraft({
         curationItemId: currentCurationItemId,
         title,
-        category: currentBrief?.category || "",
+        category: postCategory(),
         sourceType: currentSourceType || "daily_find",
         cards: result.cards,
         caption: result.caption || "",
@@ -679,7 +685,7 @@ async function addSlideImage(index, file, button) {
 function draftPayload() {
   return {
     title: $("#createTitle").value.trim() || "Untitled Find",
-    category: currentBrief?.category || "",
+    category: postCategory(),
     status: $("#draftStatus").value,
     format: currentFormat,
     hook: $("#hookLine").value.trim(),
@@ -746,6 +752,7 @@ async function openDraft(id) {
   try {
     const draft = await fetchPostDraft(id);
     currentDraftId = draft.id;
+    currentPostCategory = draft.category || "";
     currentDeck = [...(draft.post_slides || [])]
       .sort((a, b) => Number(a.slide_index) - Number(b.slide_index))
       .map((slide) => [slide.title || slide.slide_type, slide.body || "", slide.image_url || ""]);
@@ -847,12 +854,60 @@ function wrapCanvasText(context, text, maxWidth) {
   return lines;
 }
 
-function drawSlidePng(card, index) {
+function loadCanvasImage(url) {
+  return new Promise((resolve) => {
+    if (!isWebUrl(url)) {
+      resolve(null);
+      return;
+    }
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+function drawCoverImage(context, image, width, height) {
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+async function drawSlidePng(card, index) {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
   const context = canvas.getContext("2d");
   const isCover = index === 0;
+
+  if (isCover) {
+    const coverImage = await loadCanvasImage(card[2]);
+    context.fillStyle = "#d8d6cf";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (coverImage) drawCoverImage(context, coverImage, canvas.width, canvas.height);
+    const gradient = context.createLinearGradient(0, 480, 0, canvas.height);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(.55, "rgba(0,0,0,.15)");
+    gradient.addColorStop(1, "rgba(0,0,0,.8)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 420, canvas.width, 930);
+    context.textBaseline = "top";
+    context.fillStyle = "rgba(255,255,255,.82)";
+    context.font = "600 23px Arial, sans-serif";
+    context.fillText(`${topic()}  ·  ${postCategory()}`.toUpperCase(), 86, 1010);
+    context.fillStyle = "#fff";
+    context.font = "700 72px Arial, sans-serif";
+    const hookLines = wrapCanvasText(context, card[1], 900).slice(0, 4);
+    let hookY = 1060;
+    hookLines.forEach((line) => {
+      context.fillText(line, 86, hookY);
+      hookY += 82;
+    });
+    return canvas;
+  }
+
   context.fillStyle = isCover ? "#2c2c2a" : "#f1efe8";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = isCover ? "#ba7517" : "#667b68";
@@ -894,7 +949,7 @@ async function downloadPngPack() {
   try {
     const slug = (topic() || "dig-everyday").toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-").replace(/^-|-$/g, "");
     for (let index = 0; index < currentDeck.length; index += 1) {
-      const canvas = drawSlidePng(currentDeck[index], index);
+      const canvas = await drawSlidePng(currentDeck[index], index);
       const url = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = url;
@@ -994,7 +1049,7 @@ function bindEvents() {
     if (copyField) currentDeck[index][1] = field.value;
     if (imageField) currentDeck[index][2] = isWebUrl(field.value) ? field.value.trim() : "";
     renderDeckList(currentDeck);
-    renderPreviewDeck(currentDeck, currentFormat, topic());
+    renderPreviewDeck(currentDeck, currentFormat, topic(), postCategory());
     scheduleDraftSave();
   });
   $("#deckEditor").addEventListener("change", async (event) => {
@@ -1034,7 +1089,7 @@ function bindEvents() {
     $$("#formatPills .pill").forEach((item) => item.classList.remove("active"));
     pill.classList.add("active");
     $("#previewFormat").textContent = currentFormat;
-    renderPreviewDeck(currentDeck, currentFormat, topic());
+    renderPreviewDeck(currentDeck, currentFormat, topic(), postCategory());
     scheduleDraftSave();
   });
   $("#generateDeck").addEventListener("click", buildDeck);
@@ -1049,7 +1104,7 @@ function bindEvents() {
   ["createTitle", "editorialAngle", "hookLine"].forEach((id) => $("#" + id)?.addEventListener("input", () => {
     $("#previewTitle").textContent = $("#createTitle").value.trim() || "dig.everyday";
     $("#previewHook").textContent = $("#hookLine").value.trim() || currentDeck[0]?.[1] || "";
-    renderPreviewDeck(currentDeck, currentFormat, topic());
+    renderPreviewDeck(currentDeck, currentFormat, topic(), postCategory());
     scheduleDraftSave();
   }));
   $("#draftStatus")?.addEventListener("change", scheduleDraftSave);

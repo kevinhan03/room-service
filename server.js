@@ -17,6 +17,7 @@ const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.c
 const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
 const autoCollectTimezone = env.AUTO_COLLECT_TIMEZONE || "Asia/Seoul";
 const autoCollectLimit = Math.max(1, Math.min(Number(env.AUTO_COLLECT_LIMIT) || 5, 8));
+const tasteAnalysisBatchSize = 100;
 
 class AppError extends Error {
   constructor(message, status = 500, code = "APP_ERROR", details = "", userMessage = "") {
@@ -602,7 +603,7 @@ function normalizeAnalysisForDb(analysis, category) {
   };
 }
 
-async function callOpenAIRssAnalysis(feed, item, category) {
+async function callOpenAIRssAnalysis(feed, item, category, dislikeProfile = "") {
   if (!env.OPENAI_API_KEY) {
     throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
   }
@@ -623,7 +624,12 @@ async function callOpenAIRssAnalysis(feed, item, category) {
             "Prefer quiet, minimal, editorial, curated, timeless finds.",
             "Reject generic viral news, listicles, hype, and clickbait.",
             "All user-facing JSON string values must be Korean, except proper nouns.",
-            "Return only valid JSON. No markdown."
+            "Return only valid JSON. No markdown.",
+            ...(dislikeProfile ? [
+              "",
+              "Kevin has previously rejected items matching these patterns. Score similarly matching items lower:",
+              dislikeProfile
+            ] : [])
           ].join("\n")
         },
         {
@@ -665,6 +671,110 @@ async function callOpenAIRssAnalysis(feed, item, category) {
   }
   const data = parseJsonResponse(text, "OpenAI API");
   return parseModelJson(getOpenAIText(data), "OpenAI");
+}
+
+async function getRejectedCount() {
+  const rows = await supabaseRequest("curation_items?select=id&human_decision=eq.rejected", { method: "GET", headers: { Prefer: "" } }) || [];
+  return rows.length;
+}
+
+async function getLatestTasteProfile() {
+  try {
+    const rows = await supabaseRequest("taste_profiles?select=*&order=created_at.desc&limit=1", { method: "GET", headers: { Prefer: "" } });
+    return rows?.[0] || null;
+  } catch (error) {
+    log("error", "taste profile lookup failed", { details: error.message });
+    return null;
+  }
+}
+
+async function getRecentRejectedItems(limit) {
+  const rows = await supabaseRequest(`curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&human_decision=eq.rejected&order=updated_at.desc&limit=${encodeURIComponent(limit)}`, { method: "GET", headers: { Prefer: "" } }) || [];
+  return rows.map(normalizeBoardRow);
+}
+
+async function callOpenAITasteAnalysis(previousProfile, rejectedItems) {
+  if (!env.OPENAI_API_KEY) {
+    throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
+  }
+  const response = await fetchWithTimeout(openaiResponsesUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: openaiModel,
+      input: [
+        {
+          role: "developer",
+          content: [
+            "You maintain a running 'dislike profile' for dig.everyday's curator Kevin.",
+            "You are given the previous dislike profile (may be empty) and a new batch of items Kevin rejected.",
+            "Rewrite the profile to capture recurring patterns in what Kevin rejects: topics, styles, sources, categories, tones, keywords.",
+            "Keep prior patterns that still hold, drop ones that no longer seem supported, and add new ones from this batch.",
+            "Be concise and specific so a future curation model can use this to filter out similar items.",
+            "Write in Korean. Return only valid JSON. No markdown."
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: [
+            "Update the dislike profile using the newly rejected items below.",
+            "JSON shape:",
+            '{ "profile_text": "..." }',
+            "",
+            "Previous profile:",
+            previousProfile || "(none yet)",
+            "",
+            "Newly rejected items:",
+            JSON.stringify(rejectedItems.map((item) => ({
+              title: item.title,
+              category: item.category,
+              source: item.sourceName,
+              oneLineSummary: item.oneLineSummary,
+              editorialAngle: item.angle,
+              kevinTasteFit: item.kevinTasteFit,
+              scores: {
+                suitability: item.suitabilityScore,
+                tasteFit: item.tasteFitScore,
+                visual: item.visualScore,
+                story: item.storyScore
+              }
+            })), null, 2)
+          ].join("\n")
+        }
+      ]
+    })
+  }, "OpenAI API");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`OpenAI API failed with status ${response.status}.`, 502, "OPENAI_API_ERROR", text.slice(0, 500));
+  }
+  const data = parseJsonResponse(text, "OpenAI API");
+  return parseModelJson(getOpenAIText(data), "OpenAI");
+}
+
+async function maybeUpdateTasteProfile() {
+  try {
+    const [rejectedCount, latestProfile] = await Promise.all([getRejectedCount(), getLatestTasteProfile()]);
+    const analyzedThrough = latestProfile?.analyzed_through_count || 0;
+    const newCount = rejectedCount - analyzedThrough;
+    if (newCount < tasteAnalysisBatchSize) return;
+    const rejectedItems = await getRecentRejectedItems(newCount);
+    const analysis = await callOpenAITasteAnalysis(latestProfile?.profile_text || "", rejectedItems);
+    await supabaseRequest("taste_profiles", {
+      method: "POST",
+      body: JSON.stringify({
+        profile_text: cleanString(analysis.profile_text),
+        analyzed_through_count: rejectedCount,
+        sample_count: rejectedItems.length,
+        model: openaiModel
+      })
+    });
+  } catch (error) {
+    log("error", "taste profile analysis failed", { details: error.message });
+  }
 }
 
 async function resolveSourceDefinition(inputUrl) {
@@ -810,6 +920,8 @@ async function getExistingCuration(contentItemId) {
 async function collectSource(source, limit = autoCollectLimit) {
   const sourceItems = await fetchSourceItems(source, limit);
   const result = { source, imported: 0, skipped: 0, failed: 0, items: [] };
+  const tasteProfile = await getLatestTasteProfile();
+  const dislikeProfile = tasteProfile?.profile_text || "";
 
   for (const item of sourceItems) {
     try {
@@ -842,7 +954,7 @@ async function collectSource(source, limit = autoCollectLimit) {
       }
       if (!contentItem?.id) throw new AppError("content_items insert returned no id.", 502, "SUPABASE_API_ERROR");
 
-      const analysis = normalizeAnalysisForDb(await callOpenAIRssAnalysis({ name: source.name, url: source.url }, item, source.category), source.category);
+      const analysis = normalizeAnalysisForDb(await callOpenAIRssAnalysis({ name: source.name, url: source.url }, item, source.category, dislikeProfile), source.category);
       const analysisRows = await supabaseRequest("ai_analyses", {
         method: "POST",
         body: JSON.stringify({ item_type: "daily_find", content_item_id: contentItem.id, ...analysis })
@@ -1149,6 +1261,7 @@ async function handleDecision(req, res, id) {
       body: JSON.stringify(decisionPatch(decision))
     });
     if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+    if (decision === "rejected") await maybeUpdateTasteProfile();
     sendJson(res, 200, { item: rows[0], decision });
   } catch (error) {
     sendError(res, error);
@@ -1167,6 +1280,7 @@ async function handleBulkDecision(req, res) {
       method: "PATCH",
       body: JSON.stringify(decisionPatch(decision))
     });
+    if (decision === "rejected") await maybeUpdateTasteProfile();
     sendJson(res, 200, { items: rows || [], updated: rows?.length || 0, decision });
   } catch (error) {
     sendError(res, error);

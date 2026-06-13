@@ -1,4 +1,4 @@
-import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource } from "./api.js";
+import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource } from "./api.js";
 import { $, $$, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
@@ -60,6 +60,18 @@ function scoreTotal(item) {
   }, 0);
 }
 
+function displayableImageUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    const imagePath = /\.(avif|gif|jpe?g|png|webp)(?:$|[?#])/i.test(url.pathname + url.search);
+    const imageHost = /(^|[.-])(cdn|image|images|img|media|static)([.-]|$)/i.test(url.hostname);
+    return imagePath || imageHost ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 function actionErrorMessage(error) {
   if (error?.code === "MISSING_SUPABASE_KEY") {
     return "Vercel에 SUPABASE_SERVICE_ROLE_KEY가 없습니다. 환경변수를 설정한 뒤 다시 배포해 주세요.";
@@ -99,8 +111,9 @@ function renderTodayItems(items) {
   target.innerHTML = currentTodayItems.map((item) => {
     const [badgeLabel, badgeTone] = humanBadge(item);
     const checked = selectedRecommendationIds.has(item.id);
-    const image = item.imageUrl
-      ? `<img src="${safeText(item.imageUrl)}" alt="" loading="lazy">`
+    const imageUrl = displayableImageUrl(item.imageUrl);
+    const image = imageUrl
+      ? `<img src="${safeText(imageUrl)}" alt="" loading="lazy">`
       : `<div class="recommendation-image-placeholder"><span>${safeText(item.category || "Find")}</span></div>`;
     return `<article class="recommendation-card" data-item-id="${safeText(item.id)}">
       <label class="recommendation-select"><input type="checkbox" data-select-recommendation="${safeText(item.id)}"${checked ? " checked" : ""}><span class="sr-only">후보 선택</span></label>
@@ -447,11 +460,30 @@ async function saveAutomaticSource() {
 async function collectAllSourcesNow() {
   const button = $("#runAllSources");
   setBusy(button, true, "전체 수집 중...");
-  $("#rssStatus").textContent = "등록된 활성 소스를 수집하고 AI 선별 중...";
+  $("#rssStatus").textContent = "수집 대상을 준비하는 중...";
   try {
-    const result = await runAllSources();
-    $("#rssStatus").textContent = `소스 ${result.sources || 0}개 / 신규 ${result.imported || 0}개 / 중복 ${result.skipped || 0}개 / 실패 ${result.failed || 0}개`;
+    const batch = await runAllSources();
+    const sources = batch.sources || [];
+    const totals = { imported: 0, skipped: 0, failed: 0 };
+
+    for (let index = 0; index < sources.length; index += 1) {
+      const source = sources[index];
+      $("#rssStatus").textContent = `${index + 1}/${sources.length} ${source.name} 수집 및 AI 선별 중...`;
+      try {
+        const result = await runSource(source.id, batch.runId);
+        totals.imported += result.imported || 0;
+        totals.skipped += result.skipped || 0;
+        totals.failed += result.failed || 0;
+      } catch (error) {
+        console.error(error);
+        totals.failed += 1;
+      }
+    }
+
+    const result = await finalizeCollectionRun(batch.runId);
+    $("#rssStatus").textContent = `소스 ${result.sources || sources.length}개 / 신규 ${result.imported ?? totals.imported}개 / 중복 ${result.skipped ?? totals.skipped}개 / 실패 ${result.failed ?? totals.failed}개`;
     await Promise.all([renderSources(), renderToday(), renderArchive()]);
+    await renderCollectionRuns();
   } catch (error) {
     console.error(error);
     $("#rssStatus").textContent = `전체 수집 실패: ${error.message}`;

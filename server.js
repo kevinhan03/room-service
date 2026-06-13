@@ -17,7 +17,6 @@ const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.c
 const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
 const autoCollectTimezone = env.AUTO_COLLECT_TIMEZONE || "Asia/Seoul";
 const autoCollectLimit = Math.max(1, Math.min(Number(env.AUTO_COLLECT_LIMIT) || 5, 8));
-let collectionRunning = false;
 
 class AppError extends Error {
   constructor(message, status = 500, code = "APP_ERROR", details = "", userMessage = "") {
@@ -878,83 +877,64 @@ async function listActiveSources() {
   return await supabaseRequest("sources?select=*&is_active=eq.true&order=created_at.asc", { method: "GET", headers: { Prefer: "" } }) || [];
 }
 
-async function runAllSources(trigger = "manual") {
-  if (collectionRunning) return { trigger, running: true, sources: 0, imported: 0, skipped: 0, failed: 0, results: [] };
-  collectionRunning = true;
-  let run = null;
-  try {
-    const runRows = await supabaseRequest("collection_runs", {
-      method: "POST",
-      body: JSON.stringify({ trigger, status: "running" })
-    });
-    run = runRows?.[0] || null;
-    const sources = await listActiveSources();
-    const summary = { runId: run?.id || null, trigger, running: false, sources: sources.length, imported: 0, skipped: 0, failed: 0, results: [] };
-    for (const source of sources) {
-      const sourceStartedAt = new Date().toISOString();
-      try {
-        const result = await collectSource(source, autoCollectLimit);
-        summary.results.push(result);
-        summary.imported += result.imported;
-        summary.skipped += result.skipped;
-        summary.failed += result.failed;
-        await supabaseRequest("source_collection_runs", {
-          method: "POST",
-          body: JSON.stringify({
-            run_id: run?.id,
-            source_id: source.id,
-            source_name: source.name,
-            status: result.failed ? "partial" : "completed",
-            imported_count: result.imported,
-            skipped_count: result.skipped,
-            failed_count: result.failed,
-            started_at: sourceStartedAt
-          })
-        });
-      } catch (error) {
-        summary.failed += 1;
-        summary.results.push({ source, imported: 0, skipped: 0, failed: 1, items: [], error: error.message });
-        await supabaseRequest("source_collection_runs", {
-          method: "POST",
-          body: JSON.stringify({
-            run_id: run?.id,
-            source_id: source.id,
-            source_name: source.name,
-            status: "failed",
-            failed_count: 1,
-            error_message: error.message,
-            started_at: sourceStartedAt
-          })
-        });
-        log("error", "source collection failed", { sourceId: source.id, sourceName: source.name, trigger, details: error.message });
-      }
-    }
-    const status = summary.failed === 0 ? "completed" : summary.imported > 0 || summary.skipped > 0 ? "partial" : "failed";
-    if (run?.id) {
-      await supabaseRequest(`collection_runs?id=eq.${encodeURIComponent(run.id)}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          status,
-          source_count: summary.sources,
-          imported_count: summary.imported,
-          skipped_count: summary.skipped,
-          failed_count: summary.failed,
-          completed_at: new Date().toISOString()
-        })
-      });
-    }
-    return summary;
-  } catch (error) {
-    if (run?.id) {
-      await supabaseRequest(`collection_runs?id=eq.${encodeURIComponent(run.id)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "failed", error_message: error.message, completed_at: new Date().toISOString() })
-      }).catch(() => {});
-    }
-    throw error;
-  } finally {
-    collectionRunning = false;
-  }
+async function beginCollectionRun(trigger = "manual", sourceIds = []) {
+  const activeSources = await listActiveSources();
+  const requestedIds = new Set(Array.isArray(sourceIds) ? sourceIds.map(cleanString).filter(Boolean) : []);
+  const sources = requestedIds.size ? activeSources.filter((source) => requestedIds.has(source.id)) : activeSources;
+  if (!sources.length) throw new AppError("No active sources were selected.", 400, "INVALID_INPUT");
+  const runRows = await supabaseRequest("collection_runs", {
+    method: "POST",
+    body: JSON.stringify({ trigger, status: "running", source_count: sources.length })
+  });
+  return {
+    runId: runRows?.[0]?.id || null,
+    trigger,
+    sources: sources.map(({ id, name }) => ({ id, name }))
+  };
+}
+
+async function recordSourceCollection(runId, source, result, error = null, startedAt = new Date().toISOString()) {
+  if (!runId) return;
+  await supabaseRequest("source_collection_runs", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      source_id: source.id,
+      source_name: source.name,
+      status: error ? "failed" : result.failed ? "partial" : "completed",
+      imported_count: result.imported || 0,
+      skipped_count: result.skipped || 0,
+      failed_count: error ? 1 : result.failed || 0,
+      error_message: error?.message || null,
+      started_at: startedAt
+    })
+  });
+}
+
+async function finalizeCollectionRun(runId) {
+  const runs = await supabaseRequest(`source_collection_runs?select=imported_count,skipped_count,failed_count&run_id=eq.${encodeURIComponent(runId)}`, { method: "GET", headers: { Prefer: "" } }) || [];
+  const collectionRows = await supabaseRequest(`collection_runs?select=*&id=eq.${encodeURIComponent(runId)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+  const collection = collectionRows?.[0];
+  if (!collection) throw new AppError("Collection run not found.", 404, "INVALID_INPUT");
+  const summary = runs.reduce((total, run) => ({
+    imported: total.imported + Number(run.imported_count || 0),
+    skipped: total.skipped + Number(run.skipped_count || 0),
+    failed: total.failed + Number(run.failed_count || 0)
+  }), { imported: 0, skipped: 0, failed: 0 });
+  const missing = Math.max(0, Number(collection.source_count || 0) - runs.length);
+  summary.failed += missing;
+  const status = summary.failed === 0 ? "completed" : summary.imported > 0 || summary.skipped > 0 ? "partial" : "failed";
+  await supabaseRequest(`collection_runs?id=eq.${encodeURIComponent(runId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status,
+      imported_count: summary.imported,
+      skipped_count: summary.skipped,
+      failed_count: summary.failed,
+      completed_at: new Date().toISOString()
+    })
+  });
+  return { runId, sources: Number(collection.source_count || 0), ...summary, status };
 }
 
 async function handleListSources(req, res) {
@@ -998,17 +978,35 @@ async function handleImportRss(req, res) {
 
 async function handleRunAllSources(req, res) {
   try {
-    sendJson(res, 200, await runAllSources("manual"));
+    const body = await readBody(req);
+    sendJson(res, 200, await beginCollectionRun("manual", body.sourceIds));
   } catch (error) {
     sendError(res, error);
   }
 }
 
 async function handleRunSource(req, res, id) {
+  let source = null;
+  let runId = "";
+  const startedAt = new Date().toISOString();
   try {
+    const body = await readBody(req);
+    runId = cleanString(body.runId);
     const rows = await supabaseRequest(`sources?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
     if (!rows?.[0]) throw new AppError("Source not found.", 404, "INVALID_INPUT");
-    sendJson(res, 200, await collectSource(rows[0], autoCollectLimit));
+    source = rows[0];
+    const result = await collectSource(source, autoCollectLimit);
+    await recordSourceCollection(runId, source, result, null, startedAt);
+    sendJson(res, 200, result);
+  } catch (error) {
+    if (source && runId) await recordSourceCollection(runId, source, {}, error, startedAt).catch(() => {});
+    sendError(res, error);
+  }
+}
+
+async function handleFinalizeCollectionRun(req, res, id) {
+  try {
+    sendJson(res, 200, await finalizeCollectionRun(id));
   } catch (error) {
     sendError(res, error);
   }
@@ -1773,6 +1771,11 @@ function requestHandler(req, res) {
     handleCollectionRuns(req, res);
     return;
   }
+  const finalizeCollectionMatch = pathname.match(/^\/api\/collection-runs\/([^/]+)\/finalize$/);
+  if (finalizeCollectionMatch && req.method === "POST") {
+    handleFinalizeCollectionRun(req, res, finalizeCollectionMatch[1]);
+    return;
+  }
   if (req.method === "GET" && pathname === "/api/post-drafts") {
     handleListPostDrafts(req, res);
     return;
@@ -1908,4 +1911,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { requestHandler, runAllSources };
+module.exports = { requestHandler, beginCollectionRun };

@@ -118,8 +118,18 @@ export function runAllSources() {
   return appRequest("/api/sources/run-all", { method: "POST", body: "{}" }, "Source collection failed.");
 }
 
-export function runSource(id) {
-  return appRequest(`/api/sources/${encodeURIComponent(id)}/run`, { method: "POST", body: "{}" }, "Source collection failed.");
+export function runSource(id, runId = "") {
+  return appRequest(`/api/sources/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    body: JSON.stringify({ runId })
+  }, "Source collection failed.");
+}
+
+export function finalizeCollectionRun(runId) {
+  return appRequest(`/api/collection-runs/${encodeURIComponent(runId)}/finalize`, {
+    method: "POST",
+    body: "{}"
+  }, "Collection run finalization failed.");
 }
 
 export function updateSource(id, payload) {

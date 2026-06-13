@@ -138,7 +138,8 @@ function renderTodayItems(items) {
 
 async function renderToday() {
   const target = $("#todayCandidates");
-  if (target) target.innerHTML = `<div class="empty">오늘의 후보를 불러오는 중...</div>`;
+  const scrollY = window.scrollY;
+  if (target && !currentTodayItems.length) target.innerHTML = `<div class="empty">오늘의 후보를 불러오는 중...</div>`;
   try {
     const result = await loadToday();
     renderTodayItems(result.items || []);
@@ -146,6 +147,8 @@ async function renderToday() {
   } catch (error) {
     console.error(error);
     if (target) target.innerHTML = `<div class="empty">Today 후보를 불러오지 못했습니다. ${safeText(error.message)}</div>`;
+  } finally {
+    window.scrollTo(0, scrollY);
   }
 }
 
@@ -226,13 +229,17 @@ async function setCurationStatus(id, status, button) {
 }
 
 async function renderArchive() {
-  renderArchiveMessage("Board를 불러오는 중...");
+  const list = $("#archiveList");
+  const scrollY = window.scrollY;
+  if (list && !list.children.length) renderArchiveMessage("Board를 불러오는 중...");
   try {
     const items = await loadArchive();
     renderArchiveItems(items || []);
   } catch (error) {
     console.error(error);
     renderArchiveMessage("Board를 불러오지 못했습니다. Supabase 테이블과 RLS 정책을 확인하세요.");
+  } finally {
+    window.scrollTo(0, scrollY);
   }
 }
 

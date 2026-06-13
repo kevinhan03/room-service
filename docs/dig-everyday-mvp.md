@@ -168,8 +168,15 @@ Required output:
 Environment controls:
 
 ```env
+PERPLEXITY_MODEL=sonar-pro
+PERPLEXITY_DEEP_RESEARCH_MODEL=sonar-deep-research
 AUTO_COLLECT_TIMEZONE=Asia/Seoul
 AUTO_COLLECT_LIMIT=5
 ```
+
+General `Analyze` requests use Sonar Pro. Individual `Dig More` and `Post Today`
+actions preserve Kevin's decision first, then refresh that item with Sonar Deep
+Research. Bulk Dig More does not trigger research to prevent accidental cost
+spikes.
 
 The Vercel Production environment must also include the Supabase, OpenAI, and Perplexity variables used by the local `.env.local` file. Local environment files are intentionally not committed or uploaded.

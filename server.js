@@ -12,7 +12,8 @@ const apiTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs
 const openaiResponsesUrl = env.OPENAI_RESPONSES_URL || "https://api.openai.com/v1/responses";
 const perplexitySonarUrl = env.PERPLEXITY_SONAR_URL || "https://api.perplexity.ai/v1/sonar";
 const openaiModel = env.OPENAI_MODEL || "gpt-4.1-mini";
-const perplexityModel = env.PERPLEXITY_MODEL || "sonar-deep-research";
+const perplexityModel = env.PERPLEXITY_MODEL || "sonar-pro";
+const perplexityDeepResearchModel = env.PERPLEXITY_DEEP_RESEARCH_MODEL || "sonar-deep-research";
 const supabaseUrl = env.SUPABASE_URL || "https://ioobqwtwnkaqxyemprld.supabase.co";
 const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || "";
 const autoCollectTimezone = env.AUTO_COLLECT_TIMEZONE || "Asia/Seoul";
@@ -1298,7 +1299,17 @@ async function handleDecision(req, res, id) {
     });
     if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
     if (decision === "rejected") await maybeUpdateTasteProfile();
-    sendJson(res, 200, { item: rows[0], decision });
+    let deepResearch = null;
+    let deepResearchWarning = "";
+    if (decision === "dig_more" || decision === "post_today") {
+      try {
+        deepResearch = await runDeepResearchForCuration(id);
+      } catch (error) {
+        deepResearchWarning = error.message;
+        log("error", "deep research after decision failed", { id, decision, details: error.message });
+      }
+    }
+    sendJson(res, 200, { item: rows[0], decision, deepResearch, deepResearchWarning });
   } catch (error) {
     sendError(res, error);
   }
@@ -1609,7 +1620,7 @@ async function handleDeleteKevinFind(req, res, id) {
   }
 }
 
-async function callPerplexity(input) {
+async function callPerplexity(input, model = perplexityModel) {
   if (!env.PERPLEXITY_API_KEY) {
     throw new AppError("PERPLEXITY_API_KEY is missing.", 500, "MISSING_PERPLEXITY_KEY");
   }
@@ -1621,7 +1632,9 @@ async function callPerplexity(input) {
     `Category: ${input.category || "Space"}`,
     `Notes: ${input.notes || "none"}`,
     "",
-    "Do deep editorial research for dig.everyday, a Korean Instagram curation system about lifestyle finds.",
+    model === perplexityDeepResearchModel
+      ? "Do deep editorial research for dig.everyday, a Korean Instagram curation system about lifestyle finds."
+      : "Do focused editorial research for dig.everyday, a Korean Instagram curation system about lifestyle finds.",
     "The output will be used for editorial curation first, so do not stop at a short summary.",
     "",
     "Research requirements:",
@@ -1650,7 +1663,7 @@ async function callPerplexity(input) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: perplexityModel,
+      model,
       messages: [
         {
           role: "system",
@@ -1672,6 +1685,95 @@ async function callPerplexity(input) {
     content: data.choices?.[0]?.message?.content || "",
     citations: data.citations || [],
     searchResults: data.search_results || []
+  };
+}
+
+function researchNotesText(value, fallback = "") {
+  if (Array.isArray(value)) return value.map(cleanString).filter(Boolean).join("\n");
+  return cleanString(value, fallback);
+}
+
+function researchUrls(research) {
+  const citationUrls = (Array.isArray(research.citations) ? research.citations : [])
+    .map((item) => typeof item === "string" ? item : item?.url);
+  const searchUrls = (Array.isArray(research.searchResults) ? research.searchResults : [])
+    .map((item) => item?.url);
+  return [...citationUrls, ...searchUrls]
+    .map(cleanString)
+    .filter((url) => /^https?:\/\//i.test(url));
+}
+
+async function runDeepResearchForCuration(id) {
+  const rows = await supabaseRequest(`curation_items?select=*,content_items(*),kevin_finds(*),ai_analyses(*)&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+  const row = rows?.[0];
+  if (!row) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+
+  const content = row.content_items || null;
+  const kevinFind = row.kevin_finds || null;
+  const previousAnalysis = row.ai_analyses || null;
+  const sourceUrl = content?.url?.startsWith("http") ? content.url : "";
+  const input = {
+    name: cleanString(content?.title || kevinFind?.name || previousAnalysis?.generated_title, "Untitled Find"),
+    sourceUrl,
+    referenceUrls: validateReferenceUrls(content?.reference_urls || [], sourceUrl),
+    category: cleanString(previousAnalysis?.category || kevinFind?.category, "Space"),
+    notes: cleanString(content?.raw_content || kevinFind?.notes || kevinFind?.why_saved),
+    imageCredit: cleanString(content?.image_credit || kevinFind?.image_credit),
+    imageUsageStatus: cleanString(content?.image_usage_status || kevinFind?.image_usage_status, "unknown")
+  };
+  const research = await callPerplexity(input, perplexityDeepResearchModel);
+  const generated = validateResearchGenerated(await callOpenAI(input, research));
+  const analysisData = normalizeAnalysisForDb(generated.analysis, input.category);
+  let analysis = previousAnalysis;
+
+  if (previousAnalysis?.id) {
+    const analysisRows = await supabaseRequest(`ai_analyses?id=eq.${encodeURIComponent(previousAnalysis.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(analysisData)
+    });
+    analysis = analysisRows?.[0] || previousAnalysis;
+  } else {
+    const analysisRows = await supabaseRequest("ai_analyses", {
+      method: "POST",
+      body: JSON.stringify({
+        item_type: row.item_type,
+        content_item_id: content?.id || null,
+        kevin_find_id: kevinFind?.id || null,
+        ...analysisData
+      })
+    });
+    analysis = analysisRows?.[0] || null;
+  }
+
+  if (content?.id) {
+    const mergedCandidates = [...new Set([
+      sourceUrl,
+      ...(content.reference_urls || []),
+      ...researchUrls(research)
+    ].filter(Boolean))].slice(0, 10);
+    const mergedUrls = validateReferenceUrls(mergedCandidates);
+    await supabaseRequest(`content_items?id=eq.${encodeURIComponent(content.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        raw_excerpt: cleanString(generated.analysis?.one_line_summary || content.raw_excerpt),
+        raw_content: researchNotesText(generated.brief?.notes, research.content || content.raw_content),
+        reference_urls: mergedUrls
+      })
+    });
+  }
+
+  await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      ai_analysis_id: analysis?.id || row.ai_analysis_id,
+      editor_note: cleanString(generated.analysis?.editorial_angle || generated.brief?.angle || row.editor_note),
+      updated_at: new Date().toISOString()
+    })
+  });
+  return {
+    model: perplexityDeepResearchModel,
+    citations: research.citations || [],
+    sources: generated.sourceSummary || research.searchResults || []
   };
 }
 
@@ -1807,7 +1909,7 @@ async function handleResearch(req, res) {
     const body = await readBody(req);
     const input = validateResearchInput(body);
 
-    log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, referenceUrlCount: input.referenceUrls.length });
+    log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, referenceUrlCount: input.referenceUrls.length, perplexityModel });
     const research = await callPerplexity(input);
     const generated = validateResearchGenerated(await callOpenAI(input, research));
     const now = new Date();

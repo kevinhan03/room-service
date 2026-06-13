@@ -191,11 +191,14 @@ async function applyCurationDecision(id, decision, button) {
     dig_more: "Dig More",
     rejected: "Reject"
   };
-  setBusy(button, true, "저장 중...");
+  const researchDecision = decision === "dig_more" || decision === "post_today";
+  setBusy(button, true, researchDecision ? "심층 조사 중..." : "저장 중...");
   try {
-    await updateCurationDecision(id, decision);
+    const result = await updateCurationDecision(id, decision);
     selectedRecommendationIds.delete(id);
-    showToast(`${labels[decision]} 처리를 완료했습니다.`);
+    showToast(result.deepResearchWarning
+      ? `${labels[decision]}은 저장했지만 심층 조사에 실패했습니다.`
+      : `${labels[decision]} 처리를 완료했습니다.`);
     if (decision === "post_today") {
       await renderArchive();
       await useArchive(id);

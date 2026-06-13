@@ -208,10 +208,30 @@ function validateUrl(value) {
   }
 }
 
+function validateReferenceUrls(value, sourceUrl = "") {
+  const rawUrls = Array.isArray(value) ? value : cleanString(value).split(/[\n,]+/);
+  const urls = [];
+  const seen = new Set();
+  for (const rawUrl of [sourceUrl, ...rawUrls]) {
+    const candidate = cleanString(rawUrl);
+    if (!candidate) continue;
+    const url = validateUrl(candidate);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  if (urls.length > 10) {
+    throw new AppError("referenceUrls can contain at most 10 URLs.", 400, "INVALID_INPUT");
+  }
+  return urls;
+}
+
 function validateResearchInput(body) {
+  const sourceUrl = validateUrl(cleanString(body.sourceUrl));
   const input = {
     name: cleanString(body.name, "Untitled Space"),
-    sourceUrl: validateUrl(cleanString(body.sourceUrl)),
+    sourceUrl,
+    referenceUrls: validateReferenceUrls(body.referenceUrls, sourceUrl),
     category: cleanString(body.category, "Space"),
     notes: cleanString(body.notes),
     imageCredit: cleanString(body.imageCredit),
@@ -374,6 +394,7 @@ function normalizeBoardRow(row) {
     name: displayTitle,
     title: displayTitle,
     sourceUrl: source.url || "",
+    referenceUrls: Array.isArray(source.reference_urls) ? source.reference_urls : [],
     sourceName: decodeXml(source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type)),
     sourceKind: row.item_type === "kevin_found" ? "Kevin" : cleanString(source.source_type, "Magazine"),
     category: analysis?.category || source.category || "Space",
@@ -1323,7 +1344,8 @@ async function handleSaveDailyFind(req, res) {
     const body = await readBody(req);
     const brief = body.brief && typeof body.brief === "object" ? body.brief : body;
     const title = cleanString(brief.name || brief.generatedTitle, "Untitled Find");
-    const sourceUrl = cleanString(brief.sourceUrl, `manual://daily-find/${Date.now()}`);
+    const referenceUrls = validateReferenceUrls(brief.referenceUrls, brief.sourceUrl);
+    const sourceUrl = cleanString(brief.sourceUrl || referenceUrls[0], `manual://daily-find/${Date.now()}`);
     const contentRows = await supabaseRequest("content_items?on_conflict=url", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
@@ -1338,6 +1360,7 @@ async function handleSaveDailyFind(req, res) {
         publisher: cleanString(brief.sourceName),
         raw_excerpt: cleanString(brief.oneLineSummary || brief.angle),
         raw_content: cleanString(brief.notes),
+        reference_urls: referenceUrls,
         language: "ko"
       })
     });
@@ -1593,6 +1616,7 @@ async function callPerplexity(input) {
 
   const prompt = [
     `URL: ${input.sourceUrl || "none"}`,
+    `Reference URLs:\n${input.referenceUrls.length ? input.referenceUrls.map((url) => `- ${url}`).join("\n") : "- none"}`,
     `Name: ${input.name || "Untitled Space"}`,
     `Category: ${input.category || "Space"}`,
     `Notes: ${input.notes || "none"}`,
@@ -1783,18 +1807,20 @@ async function handleResearch(req, res) {
     const body = await readBody(req);
     const input = validateResearchInput(body);
 
-    log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, hasSourceUrl: Boolean(input.sourceUrl) });
+    log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, referenceUrlCount: input.referenceUrls.length });
     const research = await callPerplexity(input);
     const generated = validateResearchGenerated(await callOpenAI(input, research));
     const now = new Date();
+    const primarySourceUrl = input.sourceUrl || input.referenceUrls[0] || "";
 
     sendJson(res, 200, {
       brief: {
         id: Date.now(),
         name: input.name,
-        sourceUrl: input.sourceUrl,
+        sourceUrl: primarySourceUrl,
+        referenceUrls: input.referenceUrls,
         category: input.category,
-        sourceName: input.sourceUrl ? slugFromUrl(input.sourceUrl) : "manual note",
+        sourceName: primarySourceUrl ? slugFromUrl(primarySourceUrl) : "manual note",
         notes: generated.brief?.notes || research.content,
         angle: generated.brief?.angle || generated.analysis?.editorial_angle || "",
         generatedTitle: generated.analysis?.generated_title || "",

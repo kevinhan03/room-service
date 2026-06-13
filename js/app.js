@@ -12,18 +12,28 @@ let currentDraftId = null;
 let draftAutoSaveTimer = null;
 let currentKevinFinds = [];
 
+function parseReferenceUrls(value) {
+  return [...new Set(String(value || "")
+    .split(/[\n,]+/)
+    .map((url) => url.trim())
+    .filter(Boolean))];
+}
+
 function buildBrief() {
   const name = $("#placeName").value.trim() || "Untitled Space";
   const sourceUrl = $("#sourceUrl").value.trim();
+  const referenceUrls = parseReferenceUrls($("#referenceUrls")?.value);
+  const primarySourceUrl = sourceUrl || referenceUrls[0] || "";
   const category = $("#category").value;
   const notes = $("#researchNotes").value.trim();
   const imageCredit = $("#imageCredit")?.value.trim() || "";
   return {
     id: Date.now(),
     name,
-    sourceUrl,
+    sourceUrl: primarySourceUrl,
+    referenceUrls,
     category,
-    sourceName: sourceUrl ? slugFromUrl(sourceUrl) : "manual note",
+    sourceName: primarySourceUrl ? slugFromUrl(primarySourceUrl) : "manual note",
     notes: notes || "공간의 배경, 디자인 언어, 방문 경험을 추가하면 더 정확한 카드 구성이 만들어집니다.",
     angle: `${name}은(는) ${category.toLowerCase()}를 통해 공간의 분위기와 브랜드 태도를 동시에 보여준다.`,
     verification: "운영 시간, 위치, 예약 방식, 가격, 창립자/디자이너 정보는 발행 전 원문 또는 공식 채널로 재확인",
@@ -254,6 +264,7 @@ async function useArchive(id) {
       itemType: data.itemType || "daily_find",
       name: data.name || data.title,
       sourceUrl: data.sourceUrl || "",
+      referenceUrls: data.referenceUrls || [],
       category: data.category || "Space",
       sourceName: data.sourceName || "",
       notes: data.notes || "",
@@ -270,6 +281,7 @@ async function useArchive(id) {
     };
     $("#placeName").value = brief.name || "";
     $("#sourceUrl").value = brief.sourceUrl || "";
+    if ($("#referenceUrls")) $("#referenceUrls").value = (brief.referenceUrls || []).filter((url) => url !== brief.sourceUrl).join("\n");
     $("#category").value = brief.category || "Space";
     $("#researchNotes").value = brief.notes || "";
     if ($("#imageCredit")) $("#imageCredit").value = brief.imageCredit || "";
@@ -391,7 +403,7 @@ async function generateResearch() {
   $("#researchStatus").textContent = "dig.everyday 취향 필터로 분석 중...";
   setBusy(button, true, "분석 중...");
   try {
-    const result = await createResearch({ name: seed.name, sourceUrl: seed.sourceUrl, category: seed.category, notes: seed.notes, imageCredit: seed.imageCredit, imageUsageStatus: seed.imageUsageStatus });
+    const result = await createResearch({ name: seed.name, sourceUrl: seed.sourceUrl, referenceUrls: seed.referenceUrls, category: seed.category, notes: seed.notes, imageCredit: seed.imageCredit, imageUsageStatus: seed.imageUsageStatus });
     showBrief(result.brief);
     renderFactsAndSources(result);
     if (Array.isArray(result.cards) && result.cards.length) {

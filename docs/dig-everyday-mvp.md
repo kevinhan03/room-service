@@ -35,6 +35,7 @@ lives directly on `content_items`, `kevin_finds`, and `post_drafts`.
 - `sources.source_type`: editorial source layer (`Magazine` or `Brand`).
 - `content_items.source_type`: persisted editorial source layer (`Magazine`, `Brand`, or `Kevin`).
 - `content_items`: things discovered from Magazine and Brand sources.
+- `content_items.reference_urls`: up to ten user-provided URLs used together for research and source review.
 - `kevin_finds`: things Kevin directly experienced or personally saved.
 - `ai_analyses`: the dig.everyday taste filter.
 - `curation_items`: editorial workflow state.

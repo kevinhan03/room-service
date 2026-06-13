@@ -33,6 +33,7 @@ create table if not exists content_items (
   fetched_at timestamptz not null default now(),
   raw_excerpt text,
   raw_content text,
+  reference_urls jsonb not null default '[]',
   language text,
   content_hash text,
   created_at timestamptz not null default now()

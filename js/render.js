@@ -134,17 +134,12 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
   const safeTopic = safeText(topic || "dig.everyday");
   const safeCategory = safeText(category || format || "Find");
   $("#previewDeck").innerHTML = deck.map((card, index) => {
-    const title = safeText(card[0]);
     const copy = safeText(card[1]);
     const imageUrl = isWebUrl(card[2]) ? card[2] : "";
     const photoImageStyle = imageUrl
       ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
       : "";
-    const textImageStyle = imageUrl
-      ? ` style="background-image:linear-gradient(rgba(24,24,22,.18),rgba(24,24,22,.56)),url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
-      : "";
     const imageClass = imageUrl ? " rs-has-image" : "";
-    const number = String(index + 1).padStart(2, "0");
     if (index === 0) {
       return `<article class="rs-slide rs-cover-photo${imageClass}"${photoImageStyle}>
         ${imageUrl ? "" : `<div class="rs-photo-placeholder">커버 사진을 추가하세요</div>`}
@@ -159,14 +154,16 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
       return `<article class="rs-slide rs-photo-slide${imageClass}"${photoImageStyle}>
         ${imageUrl ? "" : `<div class="rs-photo-placeholder">사진을 추가하세요</div>`}
         <div class="rs-photo-copy">
-          <h3 class="rs-photo-title">${title}</h3>
           <p class="rs-photo-body">${copy}</p>
         </div>
         <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
       </article>`;
     }
-    const sideClass = index % 2 === 0 ? " rs-side" : "";
-    return `<article class="rs-slide rs-text${sideClass}${imageClass}"${textImageStyle}><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+    return `<article class="rs-slide rs-cta-slide${imageClass}"${photoImageStyle}>
+      ${imageUrl ? "" : `<div class="rs-photo-placeholder">CTA 사진을 추가하세요</div>`}
+      <p class="rs-cta-copy">${copy}</p>
+      <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
+    </article>`;
   }).join("");
 }
 

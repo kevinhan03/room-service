@@ -898,44 +898,54 @@ async function drawSlidePng(card, index) {
     context.font = "600 23px Arial, sans-serif";
     context.fillText(`${topic()}  ·  ${postCategory()}`.toUpperCase(), 86, 1010);
     context.fillStyle = "#fff";
-    context.font = "700 72px Arial, sans-serif";
+    context.font = "700 64px Arial, sans-serif";
     const hookLines = wrapCanvasText(context, card[1], 900).slice(0, 4);
-    let hookY = 1060;
+    let hookY = 1064;
     hookLines.forEach((line) => {
       context.fillText(line, 86, hookY);
-      hookY += 82;
+      hookY += 74;
     });
     return canvas;
   }
 
-  context.fillStyle = isCover ? "#2c2c2a" : "#f1efe8";
+  const slideImage = await loadCanvasImage(card[2]);
+  context.fillStyle = "#d8d6cf";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = isCover ? "#ba7517" : "#667b68";
-  context.fillRect(isCover ? 92 : 86, isCover ? 770 : 112, isCover ? 5 : 70, isCover ? 70 : 5);
+  if (slideImage) drawCoverImage(context, slideImage, canvas.width, canvas.height);
   context.textBaseline = "top";
-  context.letterSpacing = "0px";
-  context.fillStyle = isCover ? "#888780" : "#686a64";
-  context.font = "24px Arial, sans-serif";
-  context.fillText(isCover ? currentFormat.toUpperCase() : `${String(index + 1).padStart(2, "0")} / 07`, 86, isCover ? 110 : 154);
-  context.fillStyle = isCover ? "#f1efe8" : "#2c2c2a";
-  context.font = isCover ? "72px Georgia, serif" : "64px Georgia, serif";
-  const titleLines = wrapCanvasText(context, card[0], 880).slice(0, 4);
-  let titleY = isCover ? 865 : 260;
-  titleLines.forEach((line) => {
-    context.fillText(line, 86, titleY);
-    titleY += isCover ? 78 : 72;
-  });
-  context.fillStyle = isCover ? "rgba(241,239,232,.78)" : "#3f403d";
-  context.font = isCover ? "32px Arial, sans-serif" : "34px Arial, sans-serif";
-  const copyLines = wrapCanvasText(context, card[1], 880).slice(0, isCover ? 5 : 13);
-  let copyY = titleY + (isCover ? 34 : 72);
+
+  if (index === 6) {
+    context.fillStyle = "rgba(0,0,0,.42)";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#fff";
+    context.font = "700 64px Arial, sans-serif";
+    context.textAlign = "center";
+    const ctaLines = wrapCanvasText(context, card[1], 880).slice(0, 4);
+    const lineHeight = 78;
+    let ctaY = (canvas.height - ctaLines.length * lineHeight) / 2;
+    ctaLines.forEach((line) => {
+      context.fillText(line, canvas.width / 2, ctaY);
+      ctaY += lineHeight;
+    });
+    return canvas;
+  }
+
+  const gradient = context.createLinearGradient(0, 520, 0, canvas.height);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(.55, "rgba(0,0,0,.18)");
+  gradient.addColorStop(1, "rgba(0,0,0,.82)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 480, canvas.width, 870);
+  context.fillStyle = "rgba(255,255,255,.94)";
+  context.font = "400 30px Arial, sans-serif";
+  context.textAlign = "left";
+  const copyLines = wrapCanvasText(context, card[1], 900).slice(0, 8);
+  const lineHeight = 48;
+  let copyY = 1240 - copyLines.length * lineHeight;
   copyLines.forEach((line) => {
     context.fillText(line, 86, copyY);
-    copyY += isCover ? 47 : 54;
+    copyY += lineHeight;
   });
-  context.fillStyle = isCover ? "#d3d1c7" : "#888780";
-  context.font = "24px Georgia, serif";
-  context.fillText("dig.everyday", 86, 1260);
   return canvas;
 }
 

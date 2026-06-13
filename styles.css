@@ -98,13 +98,15 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .rs-photo-slide:after{content:"";position:absolute;inset:38% 0 0;background:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.18) 28%,rgba(0,0,0,.82) 100%);pointer-events:none}
 .rs-photo-placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#77756f;font-size:13px;letter-spacing:.08em}
 .rs-photo-copy{position:absolute;z-index:1;left:28px;right:28px;bottom:28px;display:grid;gap:10px;text-shadow:0 1px 16px rgba(0,0,0,.55)}
-.rs-photo-title{font-family:Arial,sans-serif;font-size:18px;line-height:1.25;font-weight:700;color:#fff;word-break:keep-all}
 .rs-photo-body{font-size:10.5px;line-height:1.68;font-weight:400;color:rgba(255,255,255,.92);white-space:pre-wrap;word-break:keep-all}
 .rs-cover-photo{background:#d8d6cf center/cover no-repeat;color:#fff}
 .rs-cover-photo:after{content:"";position:absolute;inset:34% 0 0;background:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.14) 28%,rgba(0,0,0,.78) 100%);pointer-events:none}
 .rs-cover-photo-copy{position:absolute;z-index:1;left:28px;right:28px;bottom:34px;display:grid;gap:10px;text-shadow:0 1px 18px rgba(0,0,0,.5)}
 .rs-cover-meta{display:flex;align-items:center;gap:7px;font-size:9px;line-height:1.3;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.8);word-break:keep-all}
-.rs-cover-hook{max-width:94%;font-family:Arial,sans-serif;font-size:30px;line-height:1.14;font-weight:750;letter-spacing:-.045em;color:#fff;white-space:pre-wrap;word-break:keep-all}
+.rs-cover-hook{max-width:94%;font-family:Arial,sans-serif;font-size:27px;line-height:1.16;font-weight:750;letter-spacing:-.04em;color:#fff;white-space:pre-wrap;word-break:keep-all}
+.rs-cta-slide{background:#d8d6cf center/cover no-repeat;color:#fff;display:grid;place-items:center;padding:34px}
+.rs-cta-slide:after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.42);pointer-events:none}
+.rs-cta-copy{position:relative;z-index:1;max-width:90%;font-family:Arial,sans-serif;font-size:25px;line-height:1.3;font-weight:700;letter-spacing:-.035em;text-align:center;color:#fff;white-space:pre-wrap;word-break:keep-all;text-shadow:0 1px 18px rgba(0,0,0,.5)}
 .rs-text{background:#f1efe8;color:#2c2c2a;padding:42px 38px 44px;display:flex;flex-direction:column}
 .rs-index{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#888780;margin-bottom:30px}
 .rs-title{font-family:Georgia,serif;font-size:36px;line-height:1;font-weight:400;margin-bottom:28px;color:#2c2c2a;word-break:keep-all}

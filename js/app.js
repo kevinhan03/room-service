@@ -1,4 +1,4 @@
-import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource } from "./api.js";
+import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource, uploadPostSlideImage } from "./api.js";
 import { $, $$, isWebUrl, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
@@ -630,7 +630,50 @@ async function renderCollectionRuns() {
 }
 
 function draftCards() {
-  return currentDeck.map(([title, copy]) => ({ title, copy }));
+  return currentDeck.map(([title, copy, imageUrl]) => ({ title, copy, imageUrl: imageUrl || "" }));
+}
+
+function resizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxSide = 1400;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.8));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("이미지를 읽지 못했습니다."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function addSlideImage(index, file, button) {
+  if (!currentDraftId) {
+    showToast("먼저 Create Post로 Draft를 만들어 주세요.", "error");
+    return;
+  }
+  setBusy(button, true, "업로드 중...");
+  try {
+    const dataUrl = await resizeImage(file);
+    const result = await uploadPostSlideImage(currentDraftId, index + 1, dataUrl);
+    currentDeck[index][2] = result.imageUrl;
+    syncDeck();
+    await saveCurrentDraft(true);
+    showToast(`${index + 1}번 슬라이드에 사진을 추가했습니다.`);
+  } catch (error) {
+    console.error(error);
+    showToast(actionErrorMessage(error), "error");
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function draftPayload() {
@@ -705,7 +748,7 @@ async function openDraft(id) {
     currentDraftId = draft.id;
     currentDeck = [...(draft.post_slides || [])]
       .sort((a, b) => Number(a.slide_index) - Number(b.slide_index))
-      .map((slide) => [slide.title || slide.slide_type, slide.body || ""]);
+      .map((slide) => [slide.title || slide.slide_type, slide.body || "", slide.image_url || ""]);
     $("#createTitle").value = draft.title || "";
     $("#editorialAngle").value = draft.editor_note || "";
     $("#hookLine").value = draft.hook || currentDeck[0]?.[1] || "";
@@ -942,14 +985,32 @@ function bindEvents() {
   $("#deckEditor").addEventListener("input", (event) => {
     const titleField = event.target.closest("[data-card-title]");
     const copyField = event.target.closest("[data-card-copy]");
-    const field = titleField || copyField;
+    const imageField = event.target.closest("[data-card-image]");
+    const field = titleField || copyField || imageField;
     if (!field) return;
-    const index = Number(field.dataset.cardTitle ?? field.dataset.cardCopy);
+    const index = Number(field.dataset.cardTitle ?? field.dataset.cardCopy ?? field.dataset.cardImage);
     if (!currentDeck[index]) return;
     if (titleField) currentDeck[index][0] = field.value;
     if (copyField) currentDeck[index][1] = field.value;
+    if (imageField) currentDeck[index][2] = isWebUrl(field.value) ? field.value.trim() : "";
     renderDeckList(currentDeck);
     renderPreviewDeck(currentDeck, currentFormat, topic());
+    scheduleDraftSave();
+  });
+  $("#deckEditor").addEventListener("change", async (event) => {
+    const fileInput = event.target.closest("[data-card-file]");
+    if (!fileInput?.files?.[0]) return;
+    const index = Number(fileInput.dataset.cardFile);
+    const button = fileInput.closest(".editor-image-actions")?.querySelector(".editor-upload-btn");
+    await addSlideImage(index, fileInput.files[0], button);
+    fileInput.value = "";
+  });
+  $("#deckEditor").addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-card-image]");
+    if (!remove) return;
+    const index = Number(remove.dataset.removeCardImage);
+    currentDeck[index][2] = "";
+    syncDeck();
     scheduleDraftSave();
   });
   $("#previewDeck").addEventListener("click", async (event) => {

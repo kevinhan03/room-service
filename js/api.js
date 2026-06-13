@@ -172,6 +172,13 @@ export function updatePostDraft(id, payload) {
   }, "Post draft update failed.");
 }
 
+export function uploadPostSlideImage(id, slideIndex, dataUrl) {
+  return appRequest(`/api/post-drafts/${encodeURIComponent(id)}/slides/${slideIndex}/image`, {
+    method: "POST",
+    body: JSON.stringify({ dataUrl })
+  }, "Slide image upload failed.");
+}
+
 export function deletePostDraft(id) {
   return appRequest(`/api/post-drafts/${encodeURIComponent(id)}`, { method: "DELETE" }, "Post draft delete failed.");
 }

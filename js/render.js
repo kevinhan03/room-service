@@ -135,19 +135,36 @@ export function renderPreviewDeck(deck, format, topic) {
   $("#previewDeck").innerHTML = deck.map((card, index) => {
     const title = safeText(card[0]);
     const copy = safeText(card[1]);
+    const imageUrl = isWebUrl(card[2]) ? card[2] : "";
+    const imageStyle = imageUrl
+      ? ` style="background-image:linear-gradient(rgba(24,24,22,.18),rgba(24,24,22,.56)),url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
+      : "";
+    const imageClass = imageUrl ? " rs-has-image" : "";
     const number = String(index + 1).padStart(2, "0");
     if (index === 0) {
-      return `<article class="rs-slide rs-cover"><span class="rs-logo">dig.everyday</span><div class="rs-eyebrow"><span class="rs-bar"></span><span class="rs-eyebrow-text">${safeText(format)}</span></div><h3 class="rs-cover-title">${safeTopic}</h3><p class="rs-cover-copy">${copy}</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+      return `<article class="rs-slide rs-cover${imageClass}"${imageStyle}><span class="rs-logo">dig.everyday</span><div class="rs-eyebrow"><span class="rs-bar"></span><span class="rs-eyebrow-text">${safeText(format)}</span></div><h3 class="rs-cover-title">${safeTopic}</h3><p class="rs-cover-copy">${copy}</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
     }
     const sideClass = index % 2 === 0 ? " rs-side" : "";
-    return `<article class="rs-slide rs-text${sideClass}"><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+    return `<article class="rs-slide rs-text${sideClass}${imageClass}"${imageStyle}><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
   }).join("");
 }
 
 export function renderDeckEditor(deck) {
   const editor = $("#deckEditor");
   if (!editor) return;
-  editor.innerHTML = deck.map((card, index) => `<article class="editor-card"><div class="editor-top"><span class="editor-no">${index + 1}</span><input class="field editor-title-input" data-card-title="${index}" value="${safeText(card[0])}" aria-label="Card ${index + 1} title"></div><textarea class="textarea editor-copy-input" data-card-copy="${index}" aria-label="Card ${index + 1} copy">${safeText(card[1])}</textarea></article>`).join("");
+  editor.innerHTML = deck.map((card, index) => {
+    const imageUrl = isWebUrl(card[2]) ? card[2] : "";
+    return `<article class="editor-card">
+      <div class="editor-top"><span class="editor-no">${index + 1}</span><input class="field editor-title-input" data-card-title="${index}" value="${safeText(card[0])}" aria-label="Card ${index + 1} title"></div>
+      <textarea class="textarea editor-copy-input" data-card-copy="${index}" aria-label="Card ${index + 1} copy">${safeText(card[1])}</textarea>
+      ${imageUrl ? `<img class="editor-image-preview" src="${safeText(imageUrl)}" alt="Card ${index + 1} preview">` : ""}
+      <div class="editor-image-actions">
+        <label class="mini-btn editor-upload-btn">사진 선택<input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" data-card-file="${index}"></label>
+        <input class="field editor-image-url" type="url" data-card-image="${index}" value="${safeText(imageUrl)}" placeholder="또는 이미지 URL">
+        ${imageUrl ? `<button class="mini-btn danger" data-remove-card-image="${index}" type="button">사진 제거</button>` : ""}
+      </div>
+    </article>`;
+  }).join("");
 }
 
 export function renderDeck(deck, format, topic) {

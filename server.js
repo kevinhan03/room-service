@@ -82,7 +82,7 @@ function userMessageForCode(code) {
     MISSING_PERPLEXITY_KEY: "Perplexity API 키가 설정되지 않았습니다. .env.local을 확인해 주세요.",
     MISSING_SUPABASE_KEY: "Supabase service role key가 설정되지 않았습니다. .env.local을 확인해 주세요.",
     SUPABASE_API_ERROR: "Supabase 저장/조회에 실패했습니다. 테이블, RLS, service role key를 확인해 주세요.",
-    MIGRATION_REQUIRED: "Supabase에 Human Saved migration이 필요합니다. supabase/migrations/20260609_human_saved.sql을 SQL Editor에서 실행해 주세요.",
+    MIGRATION_REQUIRED: "Supabase에 필요한 migration이 적용되지 않았습니다. 최신 supabase/migrations SQL을 실행해 주세요.",
     RSS_FETCH_ERROR: "RSS 피드를 가져오지 못했습니다. URL과 피드 형식을 확인해 주세요.",
     SOURCE_UNSUPPORTED: "이 사이트에서는 RSS 또는 정적 기사 목록을 찾지 못했습니다. JavaScript 렌더링이나 로그인/봇 차단이 필요할 수 있습니다.",
     API_TIMEOUT: "외부 API 응답 시간이 초과됐습니다. 잠시 후 다시 시도하세요.",
@@ -118,6 +118,37 @@ function readBody(req) {
     });
     req.on("end", () => {
       try {
+        finish(resolve, body ? JSON.parse(body) : {});
+      } catch {
+        finish(reject, new AppError("Invalid JSON body.", 400, "INVALID_JSON"));
+      }
+    });
+    req.on("error", (error) => finish(reject, error));
+  });
+}
+
+function readLargeJsonBody(req, maxBytes = 8_000_000) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        finish(reject, new AppError("Request body is too large.", 413, "REQUEST_TOO_LARGE"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        const body = Buffer.concat(chunks).toString("utf8");
         finish(resolve, body ? JSON.parse(body) : {});
       } catch {
         finish(reject, new AppError("Invalid JSON body.", 400, "INVALID_JSON"));
@@ -283,7 +314,11 @@ function validateCards(cards) {
     if (title.length > 80 || copy.length > 1000) {
       throw new AppError("Model returned a card that is too long.", 502, "MODEL_OUTPUT_INVALID", `card index=${index}, title=${title.length}, copy=${copy.length}`);
     }
-    return { title, copy };
+    const imageUrl = cleanString(card?.imageUrl || card?.image_url);
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+      throw new AppError("Card image URL must use http or https.", 400, "INVALID_INPUT", `card index=${index}`);
+    }
+    return { title, copy, imageUrl };
   });
 }
 
@@ -386,9 +421,9 @@ async function supabaseRequest(pathname, options = {}) {
   const text = await response.text();
   if (!response.ok) {
     const migrationMissing = response.status === 400
-      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count"].some((column) => text.includes(column));
+      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count", "image_url"].some((column) => text.includes(column));
     if (migrationMissing) {
-      throw new AppError("Human Saved migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
+      throw new AppError("A required Supabase migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
     }
     throw new AppError(`Supabase API failed with status ${response.status}.`, 502, "SUPABASE_API_ERROR", text.slice(0, 500));
   }
@@ -1560,7 +1595,8 @@ async function handleSavePostDraft(req, res) {
         slide_index: index + 1,
         slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
         title: card.title,
-        body: card.copy
+        body: card.copy,
+        image_url: card.imageUrl || null
       })))
     });
     sendJson(res, 200, { draft, slides: slideRows || [] });
@@ -1619,10 +1655,72 @@ async function handleUpdatePostDraft(req, res, id) {
         slide_index: index + 1,
         slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
         title: card.title,
-        body: card.copy
+        body: card.copy,
+        image_url: card.imageUrl || null
       })))
     });
     sendJson(res, 200, { draft: draftRows?.[0] || null, slides: slides || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUploadPostSlideImage(req, res, draftId, slideIndex) {
+  try {
+    requireSupabase();
+    const body = await readLargeJsonBody(req);
+    const dataUrl = cleanString(body.dataUrl);
+    const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/);
+    if (!match) throw new AppError("Only JPEG, PNG, and WebP images can be uploaded.", 400, "INVALID_INPUT");
+    const bytes = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+    if (!bytes.length || bytes.length > 6 * 1024 * 1024) {
+      throw new AppError("Image must be smaller than 6MB.", 413, "REQUEST_TOO_LARGE");
+    }
+    const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[match[1]];
+    const objectPath = `${encodeURIComponent(draftId)}/slide-${Number(slideIndex)}-${Date.now()}.${extension}`;
+    const uploadImage = () => fetchWithTimeout(`${supabaseUrl}/storage/v1/object/post-images/${objectPath}`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseServiceRoleKey,
+        Authorization: `Bearer ${supabaseServiceRoleKey}`,
+        "Content-Type": match[1]
+      },
+      body: bytes
+    }, "Supabase Storage");
+    let response = await uploadImage();
+    let text = await response.text();
+    if ([400, 404].includes(response.status) && /bucket not found/i.test(text)) {
+      const bucketResponse = await fetchWithTimeout(`${supabaseUrl}/storage/v1/bucket`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseServiceRoleKey,
+          Authorization: `Bearer ${supabaseServiceRoleKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          id: "post-images",
+          name: "post-images",
+          public: true,
+          file_size_limit: 6291456,
+          allowed_mime_types: ["image/jpeg", "image/png", "image/webp"]
+        })
+      }, "Supabase Storage bucket");
+      const bucketText = await bucketResponse.text();
+      if (!bucketResponse.ok && !/already exists|duplicate/i.test(bucketText)) {
+        throw new AppError(`Supabase Storage bucket setup failed with status ${bucketResponse.status}.`, 502, "SUPABASE_API_ERROR", bucketText.slice(0, 500));
+      }
+      response = await uploadImage();
+      text = await response.text();
+    }
+    if (!response.ok) {
+      if ([400, 404].includes(response.status) && /bucket|post-images/i.test(text)) {
+        throw new AppError("Post image migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
+      }
+      throw new AppError(`Supabase Storage failed with status ${response.status}.`, 502, "SUPABASE_API_ERROR", text.slice(0, 500));
+    }
+    sendJson(res, 200, {
+      imageUrl: `${supabaseUrl}/storage/v1/object/public/post-images/${objectPath}`
+    });
   } catch (error) {
     sendError(res, error);
   }
@@ -1974,8 +2072,12 @@ async function callOpenAICreateDeck(input, revision = null) {
             "Cover: one clean hook, not a grand claim.",
             "Introduction: identify the subject plainly and include location or context when known.",
             "Why It Matters: explain one concrete reason without saying '왜 중요한가'.",
-            "Detail slides: use the strongest specific facts. Do not repeat the angle.",
-            "Editor's Note: one honest editorial judgment in everyday Korean.",
+            "Detail 1 (slide 4): write the most vivid observable scene supported by the notes. Include what is physically there and what changes while someone is there.",
+            "Detail 2 (slide 5): give useful specifics a friend would mention after visiting, such as layout, material, menu, reservation, price, timing, route, or one easily missed detail.",
+            "Editor's Note (slide 6): write a warm, specific reason Kevin would save or recommend this find. It should sound like a real message to a friend, not an evaluation report.",
+            "Slides 4-6 must each add different information. Never repeat the Introduction or the angle.",
+            "Create a sense of firsthand attention, not a false firsthand claim. Never say '가봤다', '직접 보니', '먹어보니', or invent feelings unless the input explicitly says Kevin visited or used it.",
+            "When direct personal notes are present, preserve their plain vocabulary and small details instead of replacing them with editorial language.",
             "CTA: ask exactly one answerable, topic-specific question. Never write '저장해두세요' or '여러분은 어떻게 생각하시나요?'.",
             "Caption: 3-5 short paragraphs that add context instead of repeating all seven cards.",
             "Before returning JSON, silently audit every sentence: (1) supported by input, (2) concrete, (3) natural when read aloud, (4) not repeated elsewhere. Rewrite or delete any sentence that fails.",
@@ -2222,6 +2324,11 @@ function requestHandler(req, res) {
   }
   if (req.method === "POST" && pathname === "/api/post-drafts") {
     handleSavePostDraft(req, res);
+    return;
+  }
+  const postSlideImageMatch = pathname.match(/^\/api\/post-drafts\/([^/]+)\/slides\/([1-7])\/image$/);
+  if (postSlideImageMatch && req.method === "POST") {
+    handleUploadPostSlideImage(req, res, postSlideImageMatch[1], postSlideImageMatch[2]);
     return;
   }
   const postDraftMatch = pathname.match(/^\/api\/post-drafts\/([^/]+)$/);

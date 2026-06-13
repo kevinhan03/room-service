@@ -140,6 +140,9 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
     const photoImageStyle = imageUrl
       ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
       : "";
+    const textImageStyle = imageUrl
+      ? ` style="background-image:linear-gradient(rgba(24,24,22,.18),rgba(24,24,22,.56)),url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
+      : "";
     const imageClass = imageUrl ? " rs-has-image" : "";
     const number = String(index + 1).padStart(2, "0");
     if (index === 0) {
@@ -163,7 +166,7 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
       </article>`;
     }
     const sideClass = index % 2 === 0 ? " rs-side" : "";
-    return `<article class="rs-slide rs-text${sideClass}${imageClass}"${imageStyle}><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
+    return `<article class="rs-slide rs-text${sideClass}${imageClass}"${textImageStyle}><p class="rs-index">${number} / ${title}</p><h3 class="rs-title">${title}</h3><p class="rs-copy">${copy}</p><p class="rs-footer">dig.everyday</p><button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button></article>`;
   }).join("");
 }
 

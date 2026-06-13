@@ -762,7 +762,7 @@ async function openDraft(id) {
     $("#draftStatus").value = draft.status || "Draft";
     $("#captionText").textContent = draft.caption || "";
     currentFormat = draft.format || "Check-in";
-    $("#formatPills .pill").forEach((pill) => pill.classList.toggle("active", pill.dataset.format === currentFormat));
+    $$("#formatPills .pill").forEach((pill) => pill.classList.toggle("active", pill.dataset.format === currentFormat));
     $("#previewFormat").textContent = currentFormat;
     $("#previewTitle").textContent = draft.title || "dig.everyday";
     $("#previewHook").textContent = draft.hook || currentDeck[0]?.[1] || "";

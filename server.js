@@ -375,6 +375,9 @@ function normalizeBoardRow(row) {
   const kevinFind = row.kevin_finds || null;
   const analysis = row.ai_analyses || null;
   const source = content || kevinFind || {};
+  const sourceUrl = /^https?:\/\//i.test(source.url || "") ? source.url : "";
+  const normalizedImageUrl = normalizeExternalUrl(source.image_url || "", sourceUrl);
+  const imageUrl = /^https?:\/\//i.test(normalizedImageUrl) ? normalizedImageUrl : "";
   const displayTitle = decodeXml(source.title || source.name || analysis?.generated_title || "Untitled Find");
   return {
     id: row.id,
@@ -394,8 +397,10 @@ function normalizeBoardRow(row) {
     aiAnalysisId: row.ai_analysis_id,
     name: displayTitle,
     title: displayTitle,
-    sourceUrl: source.url || "",
-    referenceUrls: Array.isArray(source.reference_urls) ? source.reference_urls : [],
+    sourceUrl,
+    referenceUrls: Array.isArray(source.reference_urls)
+      ? source.reference_urls.filter((url) => /^https?:\/\//i.test(url || ""))
+      : [],
     sourceName: decodeXml(source.publisher || source.location || (source.url ? slugFromUrl(source.url) : row.item_type)),
     sourceKind: row.item_type === "kevin_found" ? "Kevin" : cleanString(source.source_type, "Magazine"),
     category: analysis?.category || source.category || "Space",
@@ -412,7 +417,7 @@ function normalizeBoardRow(row) {
     visualScore: analysis?.visual_score ?? null,
     storyScore: analysis?.story_score ?? null,
     verification: analysis?.verification_needed || "",
-    imageUrl: normalizeExternalUrl(source.image_url || "", source.url || ""),
+    imageUrl,
     imageCredit: source.image_credit || "",
     imageUsageStatus: source.image_usage_status || "unknown",
     createdAtLabel: row.created_at ? new Date(row.created_at).toLocaleString("ko-KR") : ""
@@ -1357,6 +1362,10 @@ async function handleSaveDailyFind(req, res) {
     const title = cleanString(brief.name || brief.generatedTitle, "Untitled Find");
     const referenceUrls = validateReferenceUrls(brief.referenceUrls, brief.sourceUrl);
     const sourceUrl = cleanString(brief.sourceUrl || referenceUrls[0], `manual://daily-find/${Date.now()}`);
+    const imageUrl = /^https?:\/\//i.test(brief.imageUrl || "") ? cleanString(brief.imageUrl) : "";
+    const imageSourceUrl = /^https?:\/\//i.test(brief.imageSourceUrl || brief.sourceUrl || "")
+      ? cleanString(brief.imageSourceUrl || brief.sourceUrl)
+      : "";
     const contentRows = await supabaseRequest("content_items?on_conflict=url", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
@@ -1364,9 +1373,9 @@ async function handleSaveDailyFind(req, res) {
         title,
         url: sourceUrl,
         source_type: "Kevin",
-        image_url: cleanString(brief.imageUrl),
+        image_url: imageUrl,
         image_credit: cleanString(brief.imageCredit),
-        image_source_url: cleanString(brief.imageSourceUrl || brief.sourceUrl),
+        image_source_url: imageSourceUrl,
         image_usage_status: cleanString(brief.imageUsageStatus, "unknown"),
         publisher: cleanString(brief.sourceName),
         raw_excerpt: cleanString(brief.oneLineSummary || brief.angle),

@@ -11,6 +11,10 @@ export function safeText(value) {
   }[char]));
 }
 
+export function isWebUrl(value) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
 export function slugFromUrl(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -76,7 +80,7 @@ export function renderFactsAndSources(result) {
     $("#researchOutput").insertAdjacentHTML("beforeend", result.researchFacts.slice(0, 12).map((item) => `<div class="insight-card"><p class="insight-title">${safeText(item.section || "Fact")} / ${safeText(item.confidence || "medium")}</p><p class="insight-body">${safeText(item.fact || "")}${item.sourceHint ? `\n${safeText(item.sourceHint)}` : ""}</p></div>`).join(""));
   }
   if (Array.isArray(result.sources)) {
-    $("#researchOutput").insertAdjacentHTML("beforeend", result.sources.slice(0, 8).map((source) => `<div class="insight-card"><p class="insight-title">Source</p><p class="insight-body">${source.url ? `<a href="${safeText(source.url)}" target="_blank" rel="noreferrer">${safeText(source.title || source.url)}</a>` : safeText(source.title || "")}</p></div>`).join(""));
+    $("#researchOutput").insertAdjacentHTML("beforeend", result.sources.slice(0, 8).map((source) => `<div class="insight-card"><p class="insight-title">Source</p><p class="insight-body">${isWebUrl(source.url) ? `<a href="${safeText(source.url)}" target="_blank" rel="noreferrer">${safeText(source.title || source.url)}</a>` : safeText(source.title || "")}</p></div>`).join(""));
   }
 }
 
@@ -94,12 +98,12 @@ export function renderArchiveItems(items) {
     const createdAt = item.createdAtLabel || item.created_at_label || "";
     const summary = item.oneLineSummary || item.notes || "아직 한줄 요약이 없습니다.";
     const angle = item.angle || item.whyThisFeelsGood || "아직 editorial angle이 없습니다.";
-    const image = item.imageUrl
+    const image = isWebUrl(item.imageUrl)
       ? `<img src="${safeText(item.imageUrl)}" alt="" loading="lazy">`
       : `<div class="archive-image-placeholder">${safeText(item.category || type)}</div>`;
     const score = (label, value) => `<span>${label}<strong>${Number(value || 0)}</strong></span>`;
     const statusButton = (value, label) => `<button class="mini-btn status-btn${status === value ? " active" : ""}" data-status="${safeText(item.id)}" data-value="${value}" type="button"${status === value ? " disabled aria-current=\"true\"" : ""}>${label}</button>`;
-    const referenceUrls = [...new Set([item.sourceUrl, ...(item.referenceUrls || [])].filter(Boolean))];
+    const referenceUrls = [...new Set([item.sourceUrl, ...(item.referenceUrls || [])].filter(isWebUrl))];
     const sourceLinks = referenceUrls.slice(0, 10).map((url, index) => `<a class="mini-btn" href="${safeText(url)}" target="_blank" rel="noreferrer">${index === 0 ? "원문" : `참고 ${index}`}</a>`).join("");
     return `<article class="archive-item archive-editorial" data-item-id="${safeText(item.id)}">
       <div class="archive-image">${image}</div>

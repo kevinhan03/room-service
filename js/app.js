@@ -1,5 +1,5 @@
 import { createDeck, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadKevinFinds, loadPostDrafts, loadSources, loadToday, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateKevinFind, updatePostDraft, updateSource } from "./api.js";
-import { $, $$, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
+import { $, $$, isWebUrl, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
 let currentBrief = null;
@@ -71,7 +71,7 @@ function scoreTotal(item) {
 }
 
 function displayableImageUrl(value) {
-  if (!value) return "";
+  if (!isWebUrl(value)) return "";
   try {
     const url = new URL(value);
     const imagePath = /\.(avif|gif|jpe?g|png|webp)(?:$|[?#])/i.test(url.pathname + url.search);
@@ -140,7 +140,7 @@ function renderTodayItems(items) {
           <button class="mini-btn" data-decision="saved_candidate" data-id="${safeText(item.id)}" type="button">Save Candidate</button>
           <button class="mini-btn" data-decision="dig_more" data-id="${safeText(item.id)}" type="button">Dig More</button>
           <button class="mini-btn danger" data-decision="rejected" data-id="${safeText(item.id)}" type="button">Reject</button>
-          ${item.sourceUrl ? `<a class="mini-btn" href="${safeText(item.sourceUrl)}" target="_blank" rel="noreferrer">원문</a>` : ""}
+          ${isWebUrl(item.sourceUrl) ? `<a class="mini-btn" href="${safeText(item.sourceUrl)}" target="_blank" rel="noreferrer">원문</a>` : ""}
         </div>
       </div>
     </article>`;

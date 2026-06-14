@@ -9,6 +9,10 @@
     {
       "source": "/api/:path*",
       "destination": "/api/index?__path=:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/api/index?__site_path=:path*"
     }
   ]
 }

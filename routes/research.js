@@ -1,7 +1,9 @@
 const { openaiModel, openaiWritingModel, perplexityModel } = require("../lib/config");
 const { sendJson, sendError, readBody, log } = require("../lib/http");
 const { validateResearchInput, validateResearchGenerated, validateDeckInput, validateDeckGenerated, deckNaturalnessIssues } = require("../lib/validate");
-const { callPerplexity, callOpenAI, callOpenAICreateDeck, researchResponse } = require("../lib/ai");
+const { callPerplexity } = require("../lib/ai/research");
+const { callOpenAI, researchResponse } = require("../lib/ai/analysis");
+const { callOpenAICreateDeck } = require("../lib/ai/deck");
 const { supabaseRequest } = require("../lib/supabase-client");
 
 async function handleResearch(req, res) {

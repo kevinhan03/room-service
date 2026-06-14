@@ -11,19 +11,21 @@ const {
 } = require("./sources");
 const {
   handleListBoard,
-  handleTodayRecommendations,
   handleDecision,
   handleBulkDecision,
   handleUpdateBoardItem,
   handleUpdateWhyNote,
   handleSaveDailyFind,
-  handleSaveKevinFind,
   handleDeleteBoardItem,
-  handleGetBoardItem,
+  handleGetBoardItem
+} = require("./board");
+const { handleTodayRecommendations } = require("./recommendations");
+const {
+  handleSaveKevinFind,
   handleListKevinFinds,
   handleUpdateKevinFind,
   handleDeleteKevinFind
-} = require("./board");
+} = require("./kevin-finds");
 const {
   handleSavePostDraft,
   handleListPostDrafts,

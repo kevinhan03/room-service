@@ -2,7 +2,9 @@ const { categories, sourceTypes, autoCollectLimit, AppError } = require("../lib/
 const { sendJson, sendError, readBody } = require("../lib/http");
 const { cleanString, validateUrl, slugFromUrl } = require("../lib/validate");
 const { supabaseRequest } = require("../lib/supabase-client");
-const { saveSource, collectSource, beginCollectionRun, recordSourceCollection, finalizeCollectionRun } = require("../lib/feeds");
+const { saveSource } = require("../lib/feeds/sources");
+const { collectSource } = require("../lib/feeds/collector");
+const { beginCollectionRun, recordSourceCollection, finalizeCollectionRun } = require("../lib/feeds/runs");
 
 async function handleListSources(req, res) {
   try {

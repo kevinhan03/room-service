@@ -16,7 +16,7 @@ const {
 } = require("./lib/config");
 const { sendJson, sendText, log } = require("./lib/http");
 const { authConfigured, isAuthenticated, sendLoginPage, handleLogin } = require("./lib/auth");
-const { beginCollectionRun } = require("./lib/feeds");
+const { beginCollectionRun } = require("./lib/feeds/runs");
 const { dispatchApiRequest } = require("./routes");
 
 function serveStatic(req, res) {

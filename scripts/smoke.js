@@ -77,7 +77,14 @@ async function run() {
     await expectStatus("/", 200, cookie);
     await expectStatus("/styles.css", 200, cookie);
     await expectStatus("/js/app.js", 200, cookie);
+    await expectStatus("/js/common.js", 200, cookie);
     await expectStatus("/js/images.js", 200, cookie);
+    await expectStatus("/js/features/board.js", 200, cookie);
+    await expectStatus("/js/features/inbox.js", 200, cookie);
+    await expectStatus("/js/features/kevin-archive.js", 200, cookie);
+    await expectStatus("/js/features/post-builder.js", 200, cookie);
+    await expectStatus("/js/features/sources.js", 200, cookie);
+    await expectStatus("/js/features/today.js", 200, cookie);
     for (const route of readRoutes) await expectStatus(route, 200, cookie);
     await expectStatus("/api/inbox", 400, cookie, { method: "POST", body: "{}" });
     await expectStatus("/api/sources", 400, cookie, {

@@ -2,7 +2,8 @@ const { AppError, categories, perplexityDeepResearchModel } = require("../lib/co
 const { sendJson, sendError, readBody } = require("../lib/http");
 const { cleanString, assertMaxLength, validateReferenceUrls, validateResearchGenerated } = require("../lib/validate");
 const { supabaseRequest } = require("../lib/supabase-client");
-const { callPerplexity, callOpenAIInboxIdeas, callOpenAI, researchResponse } = require("../lib/ai");
+const { callPerplexity } = require("../lib/ai/research");
+const { callOpenAIInboxIdeas, callOpenAI, researchResponse } = require("../lib/ai/analysis");
 
 async function handleListInbox(req, res) {
   try {

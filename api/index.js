@@ -8,8 +8,9 @@ module.exports = function handler(req, res) {
   url.searchParams.delete("__path");
   url.searchParams.delete("__site_path");
   const query = url.searchParams.toString();
-  req.url = sitePath !== null
-    ? `/${sitePath}${query ? `?${query}` : ""}`
+  const normalizedSitePath = sitePath === null ? null : sitePath.replace(/^\/+/, "");
+  req.url = normalizedSitePath !== null
+    ? `/${normalizedSitePath}${query ? `?${query}` : ""}`
     : `/api/${route}${query ? `?${query}` : ""}`;
   return requestHandler(req, res);
 };

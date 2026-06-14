@@ -437,8 +437,8 @@ async function supabaseRequest(pathname, options = {}) {
   }, "Supabase API");
   const text = await response.text();
   if (!response.ok) {
-    const migrationMissing = response.status === 400
-      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count", "image_url"].some((column) => text.includes(column));
+    const migrationMissing = [400, 404].includes(response.status)
+      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count", "image_url", "kevin_inbox_items", "kevin_inbox_ideas"].some((name) => text.includes(name));
     if (migrationMissing) {
       throw new AppError("A required Supabase migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
     }
@@ -1862,6 +1862,69 @@ async function callPerplexity(input, model = perplexityModel) {
   };
 }
 
+async function callOpenAIInboxIdeas(item, research) {
+  if (!env.OPENAI_API_KEY) {
+    throw new AppError("OPENAI_API_KEY is missing.", 500, "MISSING_OPENAI_KEY");
+  }
+  const response = await fetchWithTimeout(openaiResponsesUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: openaiModel,
+      input: [
+        {
+          role: "developer",
+          content: [
+            "You develop editorial ideas for dig.everyday, a Korean lifestyle curation Instagram account.",
+            "The goal is not to summarize news. Turn Kevin's clue into three specific subjects he could genuinely want to post.",
+            "Prefer durable places, brands, objects, design decisions, rituals, or cultural shifts over launches and trend news.",
+            "Each idea must be visually strong enough for a seven-slide photo carousel and have concrete facts worth researching.",
+            "The three ideas must be meaningfully different, not alternate headlines for the same subject.",
+            "Write natural Korean except for proper nouns. Avoid marketing language and abstract editorial jargon.",
+            "Return only valid JSON."
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: [
+            "Create exactly three post ideas from the saved clue and web research.",
+            "JSON shape:",
+            '{"ideas":[{"title":"specific subject","category":"Fashion|Space|Food|Travel|Hotel|Object|Perfume|Architecture|Product|Brand|Book|Magazine|Artwork|Playlist","angle":"what the post would specifically explain","why_publish":"why Kevin may genuinely want to make this post","research_query":"focused follow-up research instruction"}]}',
+            "",
+            JSON.stringify({
+              clue: item.seed_text,
+              referenceUrls: item.reference_urls || [],
+              webResearch: research.content,
+              citations: research.citations,
+              searchResults: research.searchResults
+            }, null, 2)
+          ].join("\n")
+        }
+      ]
+    })
+  }, "OpenAI API");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new AppError(`OpenAI API failed with status ${response.status}.`, 502, "OPENAI_API_ERROR", text.slice(0, 500));
+  }
+  const data = parseModelJson(getOpenAIText(parseJsonResponse(text, "OpenAI API")), "OpenAI");
+  const ideas = Array.isArray(data.ideas) ? data.ideas.slice(0, 3) : [];
+  if (ideas.length !== 3) {
+    throw new AppError("Model returned fewer than three ideas.", 502, "MODEL_OUTPUT_INVALID");
+  }
+  return ideas.map((idea, index) => ({
+    rank: index + 1,
+    title: cleanString(idea.title, `Idea ${index + 1}`),
+    category: categories.has(idea.category) ? idea.category : "Space",
+    angle: cleanString(idea.angle),
+    why_publish: cleanString(idea.why_publish),
+    research_query: cleanString(idea.research_query)
+  }));
+}
+
 function researchNotesText(value, fallback = "") {
   if (Array.isArray(value)) return value.map(cleanString).filter(Boolean).join("\n");
   return cleanString(value, fallback);
@@ -1949,6 +2012,178 @@ async function runDeepResearchForCuration(id) {
     citations: research.citations || [],
     sources: generated.sourceSummary || research.searchResults || []
   };
+}
+
+function researchResponse(input, research, generated) {
+  const now = new Date();
+  const primarySourceUrl = input.sourceUrl || input.referenceUrls[0] || "";
+  return {
+    brief: {
+      id: Date.now(),
+      name: input.name,
+      sourceUrl: primarySourceUrl,
+      referenceUrls: [...new Set([...input.referenceUrls, ...researchUrls(research)])].slice(0, 10),
+      category: input.category,
+      sourceName: primarySourceUrl ? slugFromUrl(primarySourceUrl) : "manual note",
+      notes: generated.brief?.notes || research.content,
+      angle: generated.brief?.angle || generated.analysis?.editorial_angle || "",
+      generatedTitle: generated.analysis?.generated_title || "",
+      oneLineSummary: generated.analysis?.one_line_summary || "",
+      threeLineSummary: generated.analysis?.three_line_summary || "",
+      recommendationReason: generated.analysis?.recommendation_reason || "",
+      whyThisFeelsGood: generated.analysis?.why_this_feels_good || "",
+      editorialAngle: generated.analysis?.editorial_angle || "",
+      visualStrength: generated.analysis?.visual_strength || "",
+      kevinTasteFit: generated.analysis?.kevin_taste_fit || "",
+      suitabilityScore: generated.analysis?.suitability_score ?? null,
+      tasteFitScore: generated.analysis?.taste_fit_score ?? null,
+      visualScore: generated.analysis?.visual_score ?? null,
+      storyScore: generated.analysis?.story_score ?? null,
+      suggestedStatus: generated.analysis?.suggested_status || "Candidate",
+      riskNotes: generated.analysis?.risk_notes || "",
+      verificationNeeded: generated.analysis?.verification_needed || generated.brief?.verification || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
+      verification: generated.brief?.verification || generated.analysis?.verification_needed || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
+      imageCredit: input.imageCredit,
+      imageUsageStatus: input.imageUsageStatus,
+      createdAt: now.toLocaleString("ko-KR")
+    },
+    cards: Array.isArray(generated.cards) ? generated.cards : [],
+    caption: generated.caption || "",
+    sources: generated.sourceSummary || research.searchResults || [],
+    researchFacts: generated.researchFacts || [],
+    citations: research.citations || []
+  };
+}
+
+async function handleListInbox(req, res) {
+  try {
+    const rows = await supabaseRequest("kevin_inbox_items?select=*,kevin_inbox_ideas(*)&order=updated_at.desc&limit=50", { method: "GET", headers: { Prefer: "" } });
+    const items = (rows || []).map((item) => ({
+      ...item,
+      kevin_inbox_ideas: [...(item.kevin_inbox_ideas || [])].sort((a, b) => Number(a.rank) - Number(b.rank))
+    }));
+    sendJson(res, 200, { items });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleCreateInbox(req, res) {
+  try {
+    const body = await readBody(req);
+    const seedText = cleanString(body.seedText);
+    const referenceUrls = validateReferenceUrls(body.referenceUrls);
+    if (!seedText && !referenceUrls.length) {
+      throw new AppError("Inbox clue or URL is required.", 400, "INVALID_INPUT");
+    }
+    assertMaxLength(seedText, 6000, "seedText");
+    const rows = await supabaseRequest("kevin_inbox_items", {
+      method: "POST",
+      body: JSON.stringify({
+        seed_text: seedText || referenceUrls[0],
+        reference_urls: referenceUrls
+      })
+    });
+    sendJson(res, 200, { item: rows?.[0] || null });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleGenerateInboxIdeas(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`kevin_inbox_items?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    const item = rows?.[0];
+    if (!item) throw new AppError("Inbox item not found.", 404, "INVALID_INPUT");
+    const input = {
+      name: cleanString(item.seed_text, "Kevin Inbox").slice(0, 120),
+      sourceUrl: item.reference_urls?.[0] || "",
+      referenceUrls: validateReferenceUrls(item.reference_urls || []),
+      category: "Space",
+      notes: cleanString(item.seed_text),
+      imageCredit: "",
+      imageUsageStatus: "unknown"
+    };
+    const research = await callPerplexity(input);
+    const ideas = await callOpenAIInboxIdeas(item, research);
+    await supabaseRequest(`kevin_inbox_ideas?inbox_item_id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+    const ideaRows = await supabaseRequest("kevin_inbox_ideas", {
+      method: "POST",
+      body: JSON.stringify(ideas.map((idea) => ({ ...idea, inbox_item_id: id })))
+    });
+    await supabaseRequest(`kevin_inbox_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "ideas_ready", updated_at: new Date().toISOString() })
+    });
+    sendJson(res, 200, { ideas: ideaRows || [] });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleUpdateInboxIdea(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const status = cleanString(body.status);
+    if (!["suggested", "selected", "held", "researched"].includes(status)) {
+      throw new AppError("Invalid idea status.", 400, "INVALID_INPUT");
+    }
+    const curationItemId = cleanString(body.curationItemId);
+    const rows = await supabaseRequest(`kevin_inbox_ideas?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status,
+        curation_item_id: curationItemId || null,
+        updated_at: new Date().toISOString()
+      })
+    });
+    const idea = rows?.[0];
+    if (idea?.inbox_item_id && status === "selected") {
+      await supabaseRequest(`kevin_inbox_ideas?inbox_item_id=eq.${encodeURIComponent(idea.inbox_item_id)}&id=neq.${encodeURIComponent(id)}&status=eq.selected`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "suggested", updated_at: new Date().toISOString() })
+      });
+      await supabaseRequest(`kevin_inbox_items?id=eq.${encodeURIComponent(idea.inbox_item_id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "selected", updated_at: new Date().toISOString() })
+      });
+    }
+    sendJson(res, 200, { idea });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function handleResearchInboxIdea(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`kevin_inbox_ideas?select=*,kevin_inbox_items(*)&id=eq.${encodeURIComponent(id)}&limit=1`, { method: "GET", headers: { Prefer: "" } });
+    const idea = rows?.[0];
+    if (!idea) throw new AppError("Inbox idea not found.", 404, "INVALID_INPUT");
+    const item = idea.kevin_inbox_items || {};
+    const input = {
+      name: cleanString(idea.title, "Untitled Find"),
+      sourceUrl: item.reference_urls?.[0] || "",
+      referenceUrls: validateReferenceUrls(item.reference_urls || []),
+      category: categories.has(idea.category) ? idea.category : "Space",
+      notes: [item.seed_text, idea.angle, idea.research_query].map(cleanString).filter(Boolean).join("\n"),
+      imageCredit: "",
+      imageUsageStatus: "unknown"
+    };
+    const research = await callPerplexity(input, perplexityDeepResearchModel);
+    const generated = validateResearchGenerated(await callOpenAI(input, research));
+    const result = researchResponse(input, research, generated);
+    await supabaseRequest(`kevin_inbox_ideas?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "researched", research_brief: result, updated_at: new Date().toISOString() })
+    });
+    await supabaseRequest(`kevin_inbox_items?id=eq.${encodeURIComponent(idea.inbox_item_id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "researched", updated_at: new Date().toISOString() })
+    });
+    sendJson(res, 200, result);
+  } catch (error) {
+    sendError(res, error);
+  }
 }
 
 async function callOpenAI(input, research) {
@@ -2141,45 +2376,7 @@ async function handleResearch(req, res) {
     log("info", "analyze request started", { route: "/api/research", name: input.name, category: input.category, referenceUrlCount: input.referenceUrls.length, perplexityModel });
     const research = await callPerplexity(input);
     const generated = validateResearchGenerated(await callOpenAI(input, research));
-    const now = new Date();
-    const primarySourceUrl = input.sourceUrl || input.referenceUrls[0] || "";
-
-    sendJson(res, 200, {
-      brief: {
-        id: Date.now(),
-        name: input.name,
-        sourceUrl: primarySourceUrl,
-        referenceUrls: input.referenceUrls,
-        category: input.category,
-        sourceName: primarySourceUrl ? slugFromUrl(primarySourceUrl) : "manual note",
-        notes: generated.brief?.notes || research.content,
-        angle: generated.brief?.angle || generated.analysis?.editorial_angle || "",
-        generatedTitle: generated.analysis?.generated_title || "",
-        oneLineSummary: generated.analysis?.one_line_summary || "",
-        threeLineSummary: generated.analysis?.three_line_summary || "",
-        recommendationReason: generated.analysis?.recommendation_reason || "",
-        whyThisFeelsGood: generated.analysis?.why_this_feels_good || "",
-        editorialAngle: generated.analysis?.editorial_angle || "",
-        visualStrength: generated.analysis?.visual_strength || "",
-        kevinTasteFit: generated.analysis?.kevin_taste_fit || "",
-        suitabilityScore: generated.analysis?.suitability_score ?? null,
-        tasteFitScore: generated.analysis?.taste_fit_score ?? null,
-        visualScore: generated.analysis?.visual_score ?? null,
-        storyScore: generated.analysis?.story_score ?? null,
-        suggestedStatus: generated.analysis?.suggested_status || "Candidate",
-        riskNotes: generated.analysis?.risk_notes || "",
-        verificationNeeded: generated.analysis?.verification_needed || generated.brief?.verification || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
-        verification: generated.brief?.verification || generated.analysis?.verification_needed || "위치, 운영 시간, 예약 방식, 가격, 공식 표기 확인 필요",
-        imageCredit: input.imageCredit,
-        imageUsageStatus: input.imageUsageStatus,
-        createdAt: now.toLocaleString("ko-KR")
-      },
-      cards: Array.isArray(generated.cards) ? generated.cards : [],
-      caption: generated.caption || "",
-      sources: generated.sourceSummary || research.searchResults || [],
-      researchFacts: generated.researchFacts || [],
-      citations: research.citations || []
-    });
+    sendJson(res, 200, researchResponse(input, research, generated));
     log("info", "analyze request completed", { route: "/api/research", name: input.name, cardCount: generated.cards.length });
   } catch (error) {
     sendError(res, error);
@@ -2281,6 +2478,29 @@ function requestHandler(req, res) {
 
   if (req.method === "POST" && pathname === "/api/research") {
     handleResearch(req, res);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/inbox") {
+    handleListInbox(req, res);
+    return;
+  }
+  if (req.method === "POST" && pathname === "/api/inbox") {
+    handleCreateInbox(req, res);
+    return;
+  }
+  const inboxIdeasMatch = pathname.match(/^\/api\/inbox\/([^/]+)\/ideas$/);
+  if (inboxIdeasMatch && req.method === "POST") {
+    handleGenerateInboxIdeas(req, res, inboxIdeasMatch[1]);
+    return;
+  }
+  const inboxIdeaResearchMatch = pathname.match(/^\/api\/inbox\/ideas\/([^/]+)\/research$/);
+  if (inboxIdeaResearchMatch && req.method === "POST") {
+    handleResearchInboxIdea(req, res, inboxIdeaResearchMatch[1]);
+    return;
+  }
+  const inboxIdeaMatch = pathname.match(/^\/api\/inbox\/ideas\/([^/]+)$/);
+  if (inboxIdeaMatch && req.method === "PATCH") {
+    handleUpdateInboxIdea(req, res, inboxIdeaMatch[1]);
     return;
   }
   if (req.method === "POST" && pathname === "/api/create-deck") {

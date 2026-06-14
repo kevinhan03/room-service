@@ -96,7 +96,21 @@
   </section>
 
   <section class="section" id="section-inbox">
-    <div class="inner"><div class="section-head"><div><p class="kicker">Inbox</p><h2>Collected Candidates</h2></div><p>Sources에서 직접 수집한 Daily Find 후보를 확인하는 수집함이다.</p></div><div class="panel"><div class="empty">수집 버튼을 실행한 결과는 Today와 Board에 준비된다.</div></div></div>
+    <div class="inner">
+      <div class="section-head"><div><p class="kicker">Kevin Inbox</p><h2>Turn Small Clues Into Ideas</h2></div><p>링크, 메모 또는 아직 자료가 없는 생각을 저장하고 게시 가능한 아이디어 3개로 발전시킨다.</p></div>
+      <div class="grid">
+        <div class="panel span-4 stack">
+          <label><span class="label">Link or Idea</span><textarea id="inboxSeed" class="textarea" placeholder="예: 오래된 수영장을 개조한 호텔들을 소개해보고 싶다. 또는 발견한 링크를 붙여 넣으세요."></textarea></label>
+          <label><span class="label">Reference URLs</span><textarea id="inboxUrls" class="textarea compact-textarea" placeholder="참고 링크가 여러 개라면 한 줄에 하나씩"></textarea></label>
+          <button id="saveInboxItem" class="btn" type="button">Inbox 저장</button>
+          <p id="inboxStatus" class="status-line"></p>
+        </div>
+        <div class="panel span-8 stack">
+          <div class="section-head compact-head"><div><p class="kicker">Idea Queue</p><h2>Saved Clues</h2></div><button id="refreshInbox" class="mini-btn" type="button">새로고침</button></div>
+          <div id="inboxList" class="inbox-list"><div class="empty">Inbox를 불러오는 중...</div></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="section" id="section-kevin">

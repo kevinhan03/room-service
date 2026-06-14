@@ -34,6 +34,39 @@ export function createResearch(payload) {
   }, "Analyze API failed.");
 }
 
+export async function loadInboxItems() {
+  const data = await appRequest("/api/inbox", { method: "GET" }, "Inbox API failed.");
+  return data.items || [];
+}
+
+export function createInboxItem(payload) {
+  return appRequest("/api/inbox", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }, "Inbox save failed.");
+}
+
+export function generateInboxIdeas(id) {
+  return appRequest(`/api/inbox/${encodeURIComponent(id)}/ideas`, {
+    method: "POST",
+    body: "{}"
+  }, "Idea generation failed.");
+}
+
+export function updateInboxIdea(id, status, curationItemId = "") {
+  return appRequest(`/api/inbox/ideas/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, curationItemId })
+  }, "Idea status update failed.");
+}
+
+export function researchInboxIdea(id) {
+  return appRequest(`/api/inbox/ideas/${encodeURIComponent(id)}/research`, {
+    method: "POST",
+    body: "{}"
+  }, "Idea research failed.");
+}
+
 export function createDeck(payload) {
   return appRequest("/api/create-deck", {
     method: "POST",

@@ -1,4 +1,4 @@
-import { isWebUrl } from "./render.js";
+import { getTextStyle, isWebUrl } from "./render.js";
 
 export function resizeImage(file) {
   return new Promise((resolve, reject) => {
@@ -63,11 +63,20 @@ function drawCoverImage(context, image, width, height) {
   context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
+function anchorForAlign(align, canvasWidth, margin) {
+  if (align === "center") return { textAlign: "center", x: canvasWidth / 2 };
+  if (align === "right") return { textAlign: "right", x: canvasWidth - margin };
+  return { textAlign: "left", x: margin };
+}
+
 async function drawSlidePng(card, index, subject, category) {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
   const context = canvas.getContext("2d");
+  const total = 7;
+  const textStyle = getTextStyle(card, index, total);
+  const fontScale = textStyle.fontScale;
 
   if (index === 0) {
     const coverImage = await loadCanvasImage(card[2]);
@@ -81,16 +90,36 @@ async function drawSlidePng(card, index, subject, category) {
     context.fillStyle = gradient;
     context.fillRect(0, 420, canvas.width, 930);
     context.textBaseline = "top";
+
+    const { textAlign, x } = anchorForAlign(textStyle.align, canvas.width, 86);
+    context.textAlign = textAlign;
+    const lineHeight = 74 * fontScale;
+    context.font = `700 ${64 * fontScale}px Arial, sans-serif`;
+    const hookLines = wrapCanvasText(context, card[1], 900).slice(0, 4);
+
+    let metaY;
+    let hookY;
+    if (textStyle.position === "top") {
+      metaY = 460;
+      hookY = metaY + 50;
+    } else if (textStyle.position === "center") {
+      const blockHeight = 50 + hookLines.length * lineHeight;
+      metaY = 420 + (canvas.height - 420 - blockHeight) / 2;
+      hookY = metaY + 50;
+    } else {
+      metaY = 1010;
+      hookY = 1064;
+    }
+
     context.fillStyle = "rgba(255,255,255,.82)";
     context.font = "600 23px Arial, sans-serif";
-    context.fillText(`${subject}  ·  ${category}`.toUpperCase(), 86, 1010);
-    context.fillStyle = "#fff";
-    context.font = "700 64px Arial, sans-serif";
-    const hookLines = wrapCanvasText(context, card[1], 900).slice(0, 4);
-    let hookY = 1064;
+    context.fillText(`${subject}  ·  ${category}`.toUpperCase(), x, metaY);
+
+    context.fillStyle = textStyle.color;
+    context.font = `700 ${64 * fontScale}px Arial, sans-serif`;
     hookLines.forEach((line) => {
-      context.fillText(line, 86, hookY);
-      hookY += 74;
+      context.fillText(line, x, hookY);
+      hookY += lineHeight;
     });
     return canvas;
   }
@@ -101,17 +130,22 @@ async function drawSlidePng(card, index, subject, category) {
   if (slideImage) drawCoverImage(context, slideImage, canvas.width, canvas.height);
   context.textBaseline = "top";
 
-  if (index === 6) {
+  if (index === total - 1) {
     context.fillStyle = "rgba(0,0,0,.42)";
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#fff";
-    context.font = "700 50px Arial, sans-serif";
-    context.textAlign = "center";
+    context.fillStyle = textStyle.color;
+    context.font = `700 ${50 * fontScale}px Arial, sans-serif`;
+    const { textAlign, x } = anchorForAlign(textStyle.align, canvas.width, 86);
+    context.textAlign = textAlign;
     const ctaLines = wrapCanvasText(context, card[1], 920).slice(0, 4);
-    const lineHeight = 62;
-    let ctaY = (canvas.height - ctaLines.length * lineHeight) / 2;
+    const lineHeight = 62 * fontScale;
+    const blockHeight = ctaLines.length * lineHeight;
+    let ctaY;
+    if (textStyle.position === "top") ctaY = 80;
+    else if (textStyle.position === "bottom") ctaY = canvas.height - blockHeight - 80;
+    else ctaY = (canvas.height - blockHeight) / 2;
     ctaLines.forEach((line) => {
-      context.fillText(line, canvas.width / 2, ctaY);
+      context.fillText(line, x, ctaY);
       ctaY += lineHeight;
     });
     return canvas;
@@ -123,14 +157,18 @@ async function drawSlidePng(card, index, subject, category) {
   gradient.addColorStop(1, "rgba(0,0,0,.82)");
   context.fillStyle = gradient;
   context.fillRect(0, 480, canvas.width, 870);
-  context.fillStyle = "rgba(255,255,255,.94)";
-  context.font = "400 30px Arial, sans-serif";
-  context.textAlign = "left";
+  context.fillStyle = textStyle.color;
+  context.font = `400 ${30 * fontScale}px Arial, sans-serif`;
+  const { textAlign, x } = anchorForAlign(textStyle.align, canvas.width, 86);
+  context.textAlign = textAlign;
   const copyLines = wrapCanvasText(context, card[1], 900).slice(0, 8);
-  const lineHeight = 48;
-  let copyY = 1240 - copyLines.length * lineHeight;
+  const lineHeight = 48 * fontScale;
+  let copyY;
+  if (textStyle.position === "top") copyY = 520;
+  else if (textStyle.position === "center") copyY = 480 + (canvas.height - 480 - copyLines.length * lineHeight) / 2;
+  else copyY = 1240 - copyLines.length * lineHeight;
   copyLines.forEach((line) => {
-    context.fillText(line, 86, copyY);
+    context.fillText(line, x, copyY);
     copyY += lineHeight;
   });
   return canvas;

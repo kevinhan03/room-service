@@ -13,11 +13,13 @@ import { downloadDeckPngPack, resizeImage } from "../images.js";
 import {
   $,
   $$,
+  getTextStyle,
   isWebUrl,
   makeDefaultHook,
   renderBrief,
   renderCaption,
   renderDeck,
+  renderDeckEditor,
   renderDeckList,
   renderPreviewDeck,
   safeText,
@@ -165,7 +167,7 @@ export function createPostBuilderFeature() {
   }
 
   function draftCards() {
-    return deck.map(([title, copy, imageUrl]) => ({ title, copy, imageUrl: imageUrl || "" }));
+    return deck.map(([title, copy, imageUrl, textStyle]) => ({ title, copy, imageUrl: imageUrl || "", textStyle: textStyle || {} }));
   }
 
   function draftPayload() {
@@ -262,7 +264,7 @@ export function createPostBuilderFeature() {
       postCategoryValue = draft.category || "";
       deck = [...(draft.post_slides || [])]
         .sort((a, b) => Number(a.slide_index) - Number(b.slide_index))
-        .map((slide) => [slide.title || slide.slide_type, slide.body || "", slide.image_url || ""]);
+        .map((slide) => [slide.title || slide.slide_type, slide.body || "", slide.image_url || "", slide.text_style || {}]);
       $("#createTitle").value = draft.title || "";
       $("#editorialAngle").value = draft.editor_note || "";
       $("#hookLine").value = draft.hook || deck[0]?.[1] || "";
@@ -320,13 +322,25 @@ export function createPostBuilderFeature() {
       const titleField = event.target.closest("[data-card-title]");
       const copyField = event.target.closest("[data-card-copy]");
       const imageField = event.target.closest("[data-card-image]");
-      const field = titleField || copyField || imageField;
+      const fontField = event.target.closest("[data-style-font]");
+      const colorField = event.target.closest("[data-style-color]");
+      const field = titleField || copyField || imageField || fontField || colorField;
       if (!field) return;
-      const index = Number(field.dataset.cardTitle ?? field.dataset.cardCopy ?? field.dataset.cardImage);
+      const index = Number(field.dataset.cardTitle ?? field.dataset.cardCopy ?? field.dataset.cardImage ?? field.dataset.styleFont ?? field.dataset.styleColor);
       if (!deck[index]) return;
       if (titleField) deck[index][0] = field.value;
       if (copyField) deck[index][1] = field.value;
       if (imageField) deck[index][2] = isWebUrl(field.value) ? field.value.trim() : "";
+      if (fontField || colorField) {
+        const next = { ...getTextStyle(deck[index], index, deck.length) };
+        if (fontField) {
+          next.fontScale = Number(field.value);
+          const label = $(`[data-style-font-label="${index}"]`);
+          if (label) label.textContent = `크기 ${Math.round(next.fontScale * 100)}%`;
+        }
+        if (colorField) next.color = field.value;
+        deck[index][3] = next;
+      }
       renderDeckList(deck);
       renderPreviewDeck(deck, format, topic(), postCategory());
       scheduleDraftSave();
@@ -341,10 +355,48 @@ export function createPostBuilderFeature() {
     });
     $("#deckEditor")?.addEventListener("click", (event) => {
       const remove = event.target.closest("[data-remove-card-image]");
-      if (!remove) return;
-      const index = Number(remove.dataset.removeCardImage);
-      deck[index][2] = "";
-      syncDeck();
+      if (remove) {
+        const index = Number(remove.dataset.removeCardImage);
+        deck[index][2] = "";
+        syncDeck();
+        scheduleDraftSave();
+        return;
+      }
+      const posBtn = event.target.closest("[data-style-pos]");
+      const alignBtn = event.target.closest("[data-style-align]");
+      const styleBtn = posBtn || alignBtn;
+      if (!styleBtn) return;
+      const index = Number(styleBtn.dataset.stylePos ?? styleBtn.dataset.styleAlign);
+      if (!deck[index]) return;
+      const next = { ...getTextStyle(deck[index], index, deck.length) };
+      if (posBtn) next.position = posBtn.dataset.value;
+      if (alignBtn) next.align = alignBtn.dataset.value;
+      deck[index][3] = next;
+      renderDeckEditor(deck);
+      renderPreviewDeck(deck, format, topic(), postCategory());
+      scheduleDraftSave();
+    });
+    $("#previewDeck")?.addEventListener("beforeinput", (event) => {
+      const target = event.target.closest("[data-card-copy]");
+      if (!target || !target.isContentEditable) return;
+      if (event.inputType === "insertParagraph" || event.inputType === "insertLineBreak") {
+        event.preventDefault();
+        document.execCommand("insertText", false, "\n");
+      } else if (event.inputType === "insertFromPaste") {
+        event.preventDefault();
+        const text = (event.dataTransfer || window.clipboardData)?.getData("text/plain") || "";
+        document.execCommand("insertText", false, text.replace(/\r\n?/g, "\n"));
+      }
+    });
+    $("#previewDeck")?.addEventListener("input", (event) => {
+      const target = event.target.closest("[data-card-copy]");
+      if (!target || !target.isContentEditable) return;
+      const index = Number(target.dataset.cardCopy);
+      if (!deck[index]) return;
+      deck[index][1] = target.textContent;
+      const sideField = document.querySelector(`#deckEditor [data-card-copy="${index}"]`);
+      if (sideField) sideField.value = deck[index][1];
+      renderDeckList(deck);
       scheduleDraftSave();
     });
     $("#previewDeck")?.addEventListener("click", async (event) => {

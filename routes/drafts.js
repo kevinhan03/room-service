@@ -38,7 +38,8 @@ async function handleSavePostDraft(req, res) {
         slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
         title: card.title,
         body: card.copy,
-        image_url: card.imageUrl || null
+        image_url: card.imageUrl || null,
+        text_style: card.textStyle || {}
       })))
     });
     sendJson(res, 200, { draft, slides: slideRows || [] });
@@ -98,7 +99,8 @@ async function handleUpdatePostDraft(req, res, id) {
         slide_type: ["Cover", "Introduction", "Why It Matters", "Detail 1", "Detail 2", "Editor's Note", "CTA"][index],
         title: card.title,
         body: card.copy,
-        image_url: card.imageUrl || null
+        image_url: card.imageUrl || null,
+        text_style: card.textStyle || {}
       })))
     });
     sendJson(res, 200, { draft: draftRows?.[0] || null, slides: slides || [] });

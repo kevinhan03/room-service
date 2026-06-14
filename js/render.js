@@ -132,6 +132,24 @@ export function prependArchiveMessage(message) {
   $("#archiveList").insertAdjacentHTML("afterbegin", `<div class="empty">${safeText(message)}</div>`);
 }
 
+export function defaultTextStyle(index, total) {
+  if (index === total - 1) {
+    return { position: "center", align: "center", fontScale: 1, color: "#ffffff" };
+  }
+  return { position: "bottom", align: "left", fontScale: 1, color: "#ffffff" };
+}
+
+export function getTextStyle(card, index, total) {
+  const defaults = defaultTextStyle(index, total);
+  const overrides = card?.[3] || {};
+  return {
+    position: overrides.position || defaults.position,
+    align: overrides.align || defaults.align,
+    fontScale: Number.isFinite(overrides.fontScale) ? overrides.fontScale : defaults.fontScale,
+    color: overrides.color || defaults.color
+  };
+}
+
 export function renderDeckList(deck) {
   $("#deckList").innerHTML = deck.map((card, index) => `<div class="deck-card"><div class="deck-no">${index + 1}</div><div><p class="deck-title">${safeText(card[0])}</p><p class="deck-copy">${safeText(card[1])}</p></div></div>`).join("");
 }
@@ -146,12 +164,14 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
       ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
       : "";
     const imageClass = imageUrl ? " rs-has-image" : "";
+    const textStyle = getTextStyle(card, index, deck.length);
+    const fsVars = `--fs-scale:${textStyle.fontScale};--fs-color:${textStyle.color}`;
     if (index === 0) {
       return `<article class="rs-slide rs-cover-photo${imageClass}"${photoImageStyle}>
         ${imageUrl ? "" : `<div class="rs-photo-placeholder">커버 사진을 추가하세요</div>`}
-        <div class="rs-cover-photo-copy">
+        <div class="rs-cover-photo-copy" data-pos="${textStyle.position}" data-align="${textStyle.align}">
           <p class="rs-cover-meta"><span>${safeTopic}</span><span aria-hidden="true">·</span><span>${safeCategory}</span></p>
-          <h3 class="rs-cover-hook">${copy}</h3>
+          <h3 class="rs-cover-hook" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</h3>
         </div>
         <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
       </article>`;
@@ -159,15 +179,15 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
     if (index < deck.length - 1) {
       return `<article class="rs-slide rs-photo-slide${imageClass}"${photoImageStyle}>
         ${imageUrl ? "" : `<div class="rs-photo-placeholder">사진을 추가하세요</div>`}
-        <div class="rs-photo-copy">
-          <p class="rs-photo-body">${copy}</p>
+        <div class="rs-photo-copy" data-pos="${textStyle.position}" data-align="${textStyle.align}">
+          <p class="rs-photo-body" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</p>
         </div>
         <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
       </article>`;
     }
-    return `<article class="rs-slide rs-cta-slide${imageClass}"${photoImageStyle}>
+    return `<article class="rs-slide rs-cta-slide${imageClass}"${photoImageStyle} data-pos="${textStyle.position}" data-align="${textStyle.align}">
       ${imageUrl ? "" : `<div class="rs-photo-placeholder">CTA 사진을 추가하세요</div>`}
-      <p class="rs-cta-copy">${copy}</p>
+      <p class="rs-cta-copy" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</p>
       <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
     </article>`;
   }).join("");
@@ -178,6 +198,9 @@ export function renderDeckEditor(deck) {
   if (!editor) return;
   editor.innerHTML = deck.map((card, index) => {
     const imageUrl = isWebUrl(card[2]) ? card[2] : "";
+    const textStyle = getTextStyle(card, index, deck.length);
+    const posBtn = (value, label) => `<button class="mini-btn style-btn${textStyle.position === value ? " active" : ""}" data-style-pos="${index}" data-value="${value}" type="button">${label}</button>`;
+    const alignBtn = (value, label) => `<button class="mini-btn style-btn${textStyle.align === value ? " active" : ""}" data-style-align="${index}" data-value="${value}" type="button">${label}</button>`;
     return `<article class="editor-card">
       <div class="editor-top"><span class="editor-no">${index + 1}</span><input class="field editor-title-input" data-card-title="${index}" value="${safeText(card[0])}" aria-label="Card ${index + 1} title"></div>
       <textarea class="textarea editor-copy-input" data-card-copy="${index}" aria-label="Card ${index + 1} copy">${safeText(card[1])}</textarea>
@@ -186,6 +209,24 @@ export function renderDeckEditor(deck) {
         <label class="mini-btn editor-upload-btn">사진 선택<input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" data-card-file="${index}"></label>
         <input class="field editor-image-url" type="url" data-card-image="${index}" value="${safeText(imageUrl)}" placeholder="또는 이미지 URL">
         ${imageUrl ? `<button class="mini-btn danger" data-remove-card-image="${index}" type="button">사진 제거</button>` : ""}
+      </div>
+      <div class="editor-style-row">
+        <div class="style-group">
+          <span class="style-label">위치</span>
+          ${posBtn("top", "상")}${posBtn("center", "중")}${posBtn("bottom", "하")}
+        </div>
+        <div class="style-group">
+          <span class="style-label">정렬</span>
+          ${alignBtn("left", "좌")}${alignBtn("center", "중")}${alignBtn("right", "우")}
+        </div>
+        <div class="style-group">
+          <span class="style-label" data-style-font-label="${index}">크기 ${Math.round(textStyle.fontScale * 100)}%</span>
+          <input class="style-range" type="range" min="0.6" max="1.8" step="0.1" value="${textStyle.fontScale}" data-style-font="${index}" aria-label="Card ${index + 1} font size">
+        </div>
+        <div class="style-group">
+          <span class="style-label">색상</span>
+          <input class="style-color" type="color" value="${textStyle.color}" data-style-color="${index}" aria-label="Card ${index + 1} text color">
+        </div>
       </div>
     </article>`;
   }).join("");

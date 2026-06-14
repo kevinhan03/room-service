@@ -3,11 +3,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 300,
-      "includeFiles": [
-        "index.html",
-        "styles.css",
-        "js/**"
-      ]
+      "includeFiles": "{index.html,styles.css,js/**}"
     }
   },
   "routes": [

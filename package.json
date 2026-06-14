@@ -1,7 +1,10 @@
 {
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "check": "node scripts/check.js",
+    "smoke": "node scripts/smoke.js",
+    "test": "npm run check && npm run smoke"
   },
   "engines": {
     "node": ">=20"

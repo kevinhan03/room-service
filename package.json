@@ -3,8 +3,9 @@
     "start": "node server.js",
     "dev": "node server.js",
     "check": "node scripts/check.js",
+    "unit": "node scripts/personalization-test.js",
     "smoke": "node scripts/smoke.js",
-    "test": "npm run check && npm run smoke"
+    "test": "npm run check && npm run unit && npm run smoke"
   },
   "engines": {
     "node": ">=20"

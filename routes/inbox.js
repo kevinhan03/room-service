@@ -4,6 +4,11 @@ const { cleanString, assertMaxLength, validateReferenceUrls, validateResearchGen
 const { supabaseRequest } = require("../lib/supabase-client");
 const { callPerplexity } = require("../lib/ai/research");
 const { callOpenAIInboxIdeas, callOpenAI, researchResponse } = require("../lib/ai/analysis");
+const {
+  loadTasteSignals,
+  rankInboxIdeas,
+  recordRecommendationEvent
+} = require("../lib/personalization");
 
 async function handleListInbox(req, res) {
   try {
@@ -34,7 +39,15 @@ async function handleCreateInbox(req, res) {
         reference_urls: referenceUrls
       })
     });
-    sendJson(res, 200, { item: rows?.[0] || null });
+    const item = rows?.[0] || null;
+    if (item) {
+      await recordRecommendationEvent("inbox_created", {
+        inboxItemId: item.id,
+        sourceType: "Kevin",
+        metadata: { title: item.seed_text, referenceUrls: item.reference_urls || [] }
+      });
+    }
+    sendJson(res, 200, { item });
   } catch (error) {
     sendError(res, error);
   }
@@ -55,11 +68,23 @@ async function handleGenerateInboxIdeas(req, res, id) {
       imageUsageStatus: "unknown"
     };
     const research = await callPerplexity(input);
-    const ideas = await callOpenAIInboxIdeas(item, research);
+    const candidates = await callOpenAIInboxIdeas(item, research);
+    const ideas = rankInboxIdeas(candidates, await loadTasteSignals());
     await supabaseRequest(`kevin_inbox_ideas?inbox_item_id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
     const ideaRows = await supabaseRequest("kevin_inbox_ideas", {
       method: "POST",
-      body: JSON.stringify(ideas.map((idea) => ({ ...idea, inbox_item_id: id })))
+      body: JSON.stringify(ideas.map((idea) => ({
+        inbox_item_id: id,
+        rank: idea.rank,
+        title: idea.title,
+        category: idea.category,
+        angle: idea.angle,
+        why_publish: idea.why_publish,
+        research_query: idea.research_query,
+        personal_score: idea.personal_score,
+        score_breakdown: idea.score_breakdown,
+        matched_preferences: idea.matched_preferences
+      })))
     });
     await supabaseRequest(`kevin_inbox_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -88,6 +113,18 @@ async function handleUpdateInboxIdea(req, res, id) {
       })
     });
     const idea = rows?.[0];
+    if (idea && ["selected", "held", "researched"].includes(status)) {
+      await recordRecommendationEvent(
+        status === "selected" ? "idea_selected" : status === "held" ? "idea_held" : "idea_researched",
+        {
+          inboxItemId: idea.inbox_item_id,
+          inboxIdeaId: idea.id,
+          category: idea.category,
+          sourceType: "Kevin",
+          metadata: { title: idea.title, angle: idea.angle, whyPublish: idea.why_publish }
+        }
+      );
+    }
     if (idea?.inbox_item_id && status === "selected") {
       await supabaseRequest(`kevin_inbox_ideas?inbox_item_id=eq.${encodeURIComponent(idea.inbox_item_id)}&id=neq.${encodeURIComponent(id)}&status=eq.selected`, {
         method: "PATCH",

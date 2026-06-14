@@ -2,6 +2,7 @@ const { AppError } = require("../lib/config");
 const { sendJson, sendError, readBody } = require("../lib/http");
 const { cleanString } = require("../lib/validate");
 const { supabaseRequest, normalizeBoardRow } = require("../lib/supabase-client");
+const { recordCurationAction } = require("../lib/personalization");
 
 async function handleSaveKevinFind(req, res) {
   try {
@@ -37,6 +38,7 @@ async function handleSaveKevinFind(req, res) {
         editor_note: cleanString(body.whySaved || body.notes)
       })
     });
+    if (boardRows?.[0]?.id) await recordCurationAction("kevin_find_created", boardRows[0].id);
     sendJson(res, 200, { item: normalizeBoardRow({ ...boardRows[0], kevin_finds: kevinFind }) });
   } catch (error) {
     sendError(res, error);

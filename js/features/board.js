@@ -1,5 +1,4 @@
 import {
-  deleteArchiveItem,
   fetchArchiveItem,
   loadArchive,
   updateCurationStatus
@@ -80,21 +79,11 @@ export function createBoardFeature({
     }
   }
 
-  async function remove(id) {
-    try {
-      await deleteArchiveItem(id);
-      await render();
-    } catch (error) {
-      console.error(error);
-      prependArchiveMessage("Board 항목을 삭제하지 못했습니다. Supabase 권한을 확인하세요.");
-    }
-  }
-
   async function setStatus(id, status, button) {
-    setBusy(button, true, "저장 중...");
+    setBusy(button, true, status === "Rejected" ? "삭제 중..." : "저장 중...");
     try {
       await updateCurationStatus(id, status);
-      showToast(`${status}로 변경했습니다.`);
+      showToast(status === "Rejected" ? "Board에서 삭제했습니다." : `${status}로 변경했습니다.`);
       await Promise.all([renderToday(), render()]);
     } catch (error) {
       console.error(error);
@@ -106,10 +95,8 @@ export function createBoardFeature({
   function bindEvents() {
     $("#archiveList")?.addEventListener("click", async (event) => {
       const useButton = event.target.closest("[data-use]");
-      const deleteButton = event.target.closest("[data-delete]");
       const statusButton = event.target.closest("[data-status]");
       if (useButton) await use(useButton.dataset.use);
-      if (deleteButton) await remove(deleteButton.dataset.delete);
       if (statusButton) await setStatus(statusButton.dataset.status, statusButton.dataset.value, statusButton);
     });
     $("#archiveList")?.addEventListener("input", (event) => {

@@ -28,9 +28,10 @@ export function createInboxFeature({
       const ideas = item.kevin_inbox_ideas || [];
       const ideaRows = ideas.length
         ? `<div class="inbox-ideas">${ideas.map((idea) => `<article class="inbox-idea ${safeText(idea.status || "suggested")}">
-            <div class="inbox-idea-top"><div><span class="inbox-rank">0${Number(idea.rank || 0)}</span><h3>${safeText(idea.title)}</h3></div><span class="status-badge muted">${safeText(idea.category)}</span></div>
+            <div class="inbox-idea-top"><div><span class="inbox-rank">0${Number(idea.rank || 0)}</span><h3>${safeText(idea.title)}</h3></div><div class="badge-row"><span class="status-badge saved">Taste ${Number(idea.personal_score || 0).toFixed(1)}</span><span class="status-badge muted">${safeText(idea.category)}</span></div></div>
             <p>${safeText(idea.angle || "")}</p>
             <p><strong>만들 이유</strong> ${safeText(idea.why_publish || "")}</p>
+            ${(idea.matched_preferences || []).length ? `<p class="archive-meta">취향 연결: ${safeText(idea.matched_preferences.join(" · "))}</p>` : ""}
             <div class="inline">
               <button class="mini-btn" data-inbox-idea-status="${safeText(idea.id)}" data-status="selected" type="button"${idea.status === "selected" ? " disabled" : ""}>선택</button>
               <button class="mini-btn" data-inbox-idea-status="${safeText(idea.id)}" data-status="held" type="button"${idea.status === "held" ? " disabled" : ""}>보류</button>

@@ -5,6 +5,7 @@ const { supabaseRequest, normalizeBoardRow, decisionPatch, toDbAnalysis } = requ
 const { getZonedParts } = require("../lib/feeds/runs");
 const { maybeUpdateTasteProfile } = require("../lib/ai/taste");
 const { runDeepResearchForCuration } = require("../lib/ai/research");
+const { recordCurationAction } = require("../lib/personalization");
 
 async function handleListBoard(req, res) {
   try {
@@ -24,6 +25,10 @@ async function handleDecision(req, res, id) {
       body: JSON.stringify(decisionPatch(decision))
     });
     if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+    await recordCurationAction(
+      decision === "saved_candidate" ? "save_candidate" : decision,
+      id
+    );
     if (decision === "rejected") await maybeUpdateTasteProfile();
     let deepResearch = null;
     let deepResearchWarning = "";
@@ -53,6 +58,10 @@ async function handleBulkDecision(req, res) {
       method: "PATCH",
       body: JSON.stringify(decisionPatch(decision))
     });
+    await Promise.all(ids.map((id) => recordCurationAction(
+      decision === "saved_candidate" ? "save_candidate" : decision,
+      id
+    )));
     if (decision === "rejected") await maybeUpdateTasteProfile();
     sendJson(res, 200, { items: rows || [], updated: rows?.length || 0, decision });
   } catch (error) {
@@ -66,10 +75,18 @@ async function handleUpdateBoardItem(req, res, id) {
     const status = cleanString(body.status);
     const allowed = new Set(["Candidate", "Approved", "Hold", "Rejected", "Dig More Candidate"]);
     if (!allowed.has(status)) throw new AppError("status is not supported.", 400, "INVALID_INPUT", status);
+    if (status === "Rejected") {
+      await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "" } });
+      sendJson(res, 200, { ok: true, deleted: true });
+      return;
+    }
     const rows = await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({ status, updated_at: new Date().toISOString() })
     });
+    if (rows?.[0] && ["Approved", "Hold"].includes(status)) {
+      await recordCurationAction(status === "Approved" ? "board_approved" : "board_held", id);
+    }
     sendJson(res, 200, { item: rows?.[0] || null });
   } catch (error) {
     sendError(res, error);
@@ -97,6 +114,8 @@ async function handleUpdateWhyNote(req, res, id) {
       body: JSON.stringify(patch)
     });
     if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+    await supabaseRequest(`recommendation_events?curation_item_id=eq.${encodeURIComponent(id)}&action=eq.why_note`, { method: "DELETE", headers: { Prefer: "" } });
+    if (whyILikeThis) await recordCurationAction("why_note", id, { whyILikeThis });
     const recommendationDate = getZonedParts().date;
     await supabaseRequest(`recommendation_snapshots?recommendation_date=eq.${recommendationDate}`, {
       method: "DELETE",
@@ -163,6 +182,7 @@ async function handleSaveDailyFind(req, res) {
         editor_note: cleanString(brief.editorNote || brief.angle)
       })
     });
+    if (boardRows?.[0]?.id) await recordCurationAction("save_candidate", boardRows[0].id);
     sendJson(res, 200, { item: normalizeBoardRow({ ...boardRows[0], content_items: contentItem, ai_analyses: analysis }) });
   } catch (error) {
     sendError(res, error);

@@ -104,12 +104,13 @@ export function renderArchiveItems(items) {
       : `<div class="archive-image-placeholder">${safeText(item.category || type)}</div>`;
     const score = (label, value) => `<span>${label}<strong>${Number(value || 0)}</strong></span>`;
     const statusButton = (value, label) => `<button class="mini-btn status-btn${status === value ? " active" : ""}" data-status="${safeText(item.id)}" data-value="${value}" type="button"${status === value ? " disabled aria-current=\"true\"" : ""}>${label}</button>`;
+    const rejectButton = `<button class="mini-btn danger" data-status="${safeText(item.id)}" data-value="Rejected" type="button">Reject</button>`;
     const referenceUrls = [...new Set([item.sourceUrl, ...(item.referenceUrls || [])].filter(isWebUrl))];
     const sourceLinks = referenceUrls.slice(0, 10).map((url, index) => `<a class="mini-btn" href="${safeText(url)}" target="_blank" rel="noreferrer">${index === 0 ? "원문" : `참고 ${index}`}</a>`).join("");
     return `<article class="archive-item archive-editorial" data-item-id="${safeText(item.id)}">
       <div class="archive-image">${image}</div>
       <div class="archive-content">
-        <div class="archive-top"><div><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(sourceKind)} / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)}</p><h3 class="archive-title">${safeText(item.name || item.title)}</h3></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${statusButton("Rejected", "Reject")}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button>${sourceLinks}<button class="mini-btn danger" data-delete="${safeText(item.id)}" type="button">삭제</button></div></div>
+        <div class="archive-top"><div><p class="archive-meta"><span class="status-label">${safeText(status)}</span> / ${safeText(sourceKind)} / ${safeText(type)} / ${safeText(item.category)} / ${safeText(sourceName)}</p><h3 class="archive-title">${safeText(item.name || item.title)}</h3></div><div class="archive-actions">${statusButton("Approved", "Approve")}${statusButton("Hold", "Hold")}${rejectButton}<button class="mini-btn" data-use="${safeText(item.id)}" type="button">사용</button>${sourceLinks}</div></div>
         <p class="archive-summary">${safeText(summary)}</p>
         <div class="archive-score-row">${score("Suitability", item.suitabilityScore)}${score("Taste", item.tasteFitScore)}${score("Visual", item.visualScore)}${score("Story", item.storyScore)}</div>
         <div class="archive-angle"><span>Editorial angle</span><p>${safeText(angle)}</p></div>

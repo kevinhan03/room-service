@@ -183,6 +183,13 @@ export function updateCurationStatus(id, status) {
   }, "Curation status update failed.");
 }
 
+export function updateWhyNote(id, whyILikeThis, kevinAngle = "") {
+  return appRequest(`/api/curation-items/${encodeURIComponent(id)}/why-note`, {
+    method: "PATCH",
+    body: JSON.stringify({ whyILikeThis, kevinAngle })
+  }, "Why I Like This 저장에 실패했습니다.");
+}
+
 export async function loadCollectionRuns() {
   const data = await appRequest("/api/collection-runs", { method: "GET" }, "Collection runs API failed.");
   return data.runs || [];

@@ -59,6 +59,7 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .field,.textarea,.select{width:100%;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:11px 12px;outline:none}
 .textarea{min-height:118px;resize:vertical;line-height:1.65}
 .compact-textarea{min-height:82px}
+.field-help{margin-top:-5px;font-size:11px;line-height:1.55;color:var(--muted)}
 .pill-list{display:flex;gap:8px;flex-wrap:wrap}
 .pill{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:999px;padding:7px 10px;font-size:12px}
 .pill.active{background:var(--deep);color:#fff;border-color:var(--deep)}
@@ -81,6 +82,12 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .archive-angle{padding-top:8px;border-top:1px solid var(--line)}
 .archive-angle span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--clay)}
 .archive-angle p{margin-top:4px;font-size:12px;line-height:1.55;color:var(--muted);word-break:keep-all}
+.why-note-box{display:grid;gap:6px;padding:11px;border:1px solid #ddd6c9;border-radius:6px;background:#faf8f2}
+.why-note-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.why-note-head strong{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--clay)}
+.why-note-status{font-size:10px;color:var(--muted)}
+.why-note-input{width:100%;min-height:70px;border:0;border-radius:4px;background:#fff;padding:9px 10px;color:var(--ink);font:inherit;font-size:12px;line-height:1.6;resize:vertical;outline:1px solid var(--line)}
+.why-note-input:focus{outline-color:var(--moss)}
 .archive-date{font-size:10px;color:var(--muted)}
 @media(max-width:700px){.archive-editorial{grid-template-columns:1fr}.archive-image,.archive-image img,.archive-image-placeholder{height:190px;min-height:190px}.archive-top{flex-direction:column}.archive-actions{justify-content:flex-start}}
 .mini-btn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:5px;font-size:12px;padding:7px 9px}

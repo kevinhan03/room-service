@@ -1,4 +1,4 @@
-import { createDeck, createInboxItem, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, generateInboxIdeas, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadInboxItems, loadKevinFinds, loadPostDrafts, loadSources, loadToday, researchInboxIdea, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateInboxIdea, updateKevinFind, updatePostDraft, updateSource, uploadPostSlideImage } from "./api.js";
+import { createDeck, createInboxItem, createResearch, createSource, deleteArchiveItem, deleteKevinFind, deletePostDraft, deleteSource, fetchArchiveItem, fetchPostDraft, finalizeCollectionRun, generateInboxIdeas, importRssFeed, insertArchiveItem, insertKevinFind, insertPostDraft, loadArchive, loadCollectionRuns, loadInboxItems, loadKevinFinds, loadPostDrafts, loadSources, loadToday, researchInboxIdea, runAllSources, runSource, updateBulkCurationDecision, updateCurationDecision, updateCurationStatus, updateInboxIdea, updateKevinFind, updatePostDraft, updateSource, updateWhyNote, uploadPostSlideImage } from "./api.js";
 import { $, $$, isWebUrl, makeDefaultHook, prependArchiveMessage, renderArchiveItems, renderArchiveMessage, renderBrief, renderCaption, renderDeck, renderDeckList, renderFactsAndSources, renderPreviewDeck, safeText, setBusy, showToast, slugFromUrl } from "./render.js";
 
 let currentFormat = "Check-in";
@@ -13,6 +13,7 @@ let currentDraftId = null;
 let draftAutoSaveTimer = null;
 let currentKevinFinds = [];
 let currentInboxItems = [];
+const whyNoteTimers = new Map();
 
 function parseReferenceUrls(value) {
   return [...new Set(String(value || "")
@@ -48,7 +49,7 @@ function buildBrief() {
 function showBrief(brief) {
   currentBrief = brief;
   currentPostCategory = brief.category || "";
-  currentCurationItemId = brief.curationItemId || brief.id || currentCurationItemId;
+  currentCurationItemId = brief.curationItemId || null;
   currentSourceType = brief.itemType || currentSourceType || "daily_find";
   renderBrief(brief);
 }
@@ -138,6 +139,10 @@ function renderTodayItems(items) {
         <p class="candidate-summary">${safeText(item.oneLineSummary || item.angle || "")}</p>
         <div class="score-strip"><span>Suitability <strong>${Number(item.suitabilityScore || 0)}</strong></span><span>Taste <strong>${Number(item.tasteFitScore || 0)}</strong></span><span>Visual <strong>${Number(item.visualScore || 0)}</strong></span></div>
         <div class="editorial-angle"><span>Editorial angle</span><p>${safeText(item.angle || item.recommendationReason || "아직 편집 앵글이 없습니다.")}</p></div>
+        <div class="why-note-box">
+          <div class="why-note-head"><strong>Why I Like This</strong><span class="why-note-status" data-why-note-status="${safeText(item.id)}">${item.whyNoteUpdatedAt ? "저장됨" : "입력 대기"}</span></div>
+          <textarea class="why-note-input" data-why-note="${safeText(item.id)}" placeholder="왜 이게 좋았는지 한두 줄로 적어보세요. 최종 게시물은 이 메모를 중심으로 작성됩니다.">${safeText(item.whyILikeThis || "")}</textarea>
+        </div>
         <div class="recommendation-actions">
           <button class="mini-btn primary-action" data-decision="post_today" data-id="${safeText(item.id)}" type="button">Post Today</button>
           <button class="mini-btn" data-decision="saved_candidate" data-id="${safeText(item.id)}" type="button">Save Candidate</button>
@@ -148,6 +153,38 @@ function renderTodayItems(items) {
       </div>
     </article>`;
   }).join("");
+}
+
+function scheduleWhyNoteSave(field) {
+  const id = field?.dataset.whyNote;
+  if (!id) return;
+  const status = field.closest("[data-item-id]")?.querySelector("[data-why-note-status]");
+  if (status) status.textContent = "입력 중...";
+  clearTimeout(whyNoteTimers.get(id));
+  whyNoteTimers.set(id, setTimeout(async () => {
+    if (status) status.textContent = "저장 중...";
+    try {
+      const result = await updateWhyNote(id, field.value.trim());
+      const saved = result.item || {};
+      const todayItem = currentTodayItems.find((item) => item.id === id);
+      if (todayItem) {
+        todayItem.whyILikeThis = saved.whyILikeThis ?? field.value.trim();
+        todayItem.personalRelevanceScore = saved.personalRelevanceScore ?? todayItem.personalRelevanceScore;
+        todayItem.whyNoteUpdatedAt = saved.whyNoteUpdatedAt || new Date().toISOString();
+      }
+      if (currentBrief?.curationItemId === id) {
+        currentBrief.whyILikeThis = field.value.trim();
+        if ($("#whyILikeThis")) $("#whyILikeThis").value = field.value.trim();
+      }
+      if (status) status.textContent = "저장됨";
+    } catch (error) {
+      console.error(error);
+      if (status) status.textContent = "저장 실패";
+      showToast(actionErrorMessage(error), "error");
+    } finally {
+      whyNoteTimers.delete(id);
+    }
+  }, 700));
 }
 
 async function renderToday() {
@@ -280,6 +317,9 @@ async function useArchive(id) {
       visualStrength: data.visualStrength || "",
       kevinTasteFit: data.kevinTasteFit || "",
       recommendationReason: data.recommendationReason || "",
+      whyILikeThis: data.whyILikeThis || "",
+      kevinAngle: data.kevinAngle || "",
+      personalRelevanceScore: data.personalRelevanceScore || 0,
       verification: data.verification || "",
       imageCredit: data.imageCredit || "",
       imageUsageStatus: data.imageUsageStatus || "unknown",
@@ -345,13 +385,28 @@ async function buildDeck() {
   const button = $("#generateDeck");
   const title = $("#createTitle").value.trim() || "Untitled Space";
   const angle = $("#editorialAngle").value.trim() || "";
+  const whyILikeThis = $("#whyILikeThis")?.value.trim() || currentBrief?.whyILikeThis || "";
   const hook = $("#hookLine").value.trim() || makeDefaultHook(title);
+  if (!whyILikeThis && !window.confirm("Why I Like This 메모가 없습니다. 원문 요약 중심의 초안이 될 수 있습니다. 그래도 생성할까요?")) return;
   $("#previewTitle").textContent = title;
   $("#previewHook").textContent = hook;
   $("#captionText").textContent = "카드 초안을 생성하는 중입니다...";
   setBusy(button, true, "생성 중...");
   try {
-    const result = await createDeck({ title, angle, hook, format: currentFormat, notes: currentBrief?.notes || $("#researchNotes").value.trim() || "" });
+    if (currentCurationItemId && whyILikeThis) {
+      await updateWhyNote(currentCurationItemId, whyILikeThis, currentBrief?.kevinAngle || "");
+    }
+    const result = await createDeck({
+      curationItemId: currentCurationItemId,
+      title,
+      angle,
+      whyILikeThis,
+      kevinAngle: currentBrief?.kevinAngle || "",
+      hook,
+      format: currentFormat,
+      notes: currentBrief?.notes || $("#researchNotes").value.trim() || ""
+    });
+    if (currentBrief && result.kevinAngle) currentBrief.kevinAngle = result.kevinAngle;
     if (Array.isArray(result.cards) && result.cards.length) {
       currentDeck = result.cards.map((card) => [card.title, card.copy]);
       syncDeck();
@@ -1135,6 +1190,10 @@ function bindEvents() {
     else selectedRecommendationIds.delete(checkbox.dataset.selectRecommendation);
     renderBulkBar();
   });
+  $("#todayCandidates")?.addEventListener("input", (event) => {
+    const field = event.target.closest("[data-why-note]");
+    if (field) scheduleWhyNoteSave(field);
+  });
   $("#todayCandidates")?.addEventListener("click", async (event) => {
     const action = event.target.closest("[data-decision]");
     if (action) await applyCurationDecision(action.dataset.id, action.dataset.decision, action);
@@ -1169,6 +1228,10 @@ function bindEvents() {
     if (use) await useArchive(use.dataset.use);
     if (del) await deleteArchive(del.dataset.delete);
     if (status) await setCurationStatus(status.dataset.status, status.dataset.value, status);
+  });
+  $("#archiveList").addEventListener("input", (event) => {
+    const field = event.target.closest("[data-why-note]");
+    if (field) scheduleWhyNoteSave(field);
   });
   $("#deckEditor").addEventListener("input", (event) => {
     const titleField = event.target.closest("[data-card-title]");
@@ -1234,7 +1297,8 @@ function bindEvents() {
     if (open) await openDraft(open.dataset.openDraft);
     if (del) await removeDraft(del.dataset.deleteDraft);
   });
-  ["createTitle", "editorialAngle", "hookLine"].forEach((id) => $("#" + id)?.addEventListener("input", () => {
+  ["createTitle", "whyILikeThis", "editorialAngle", "hookLine"].forEach((id) => $("#" + id)?.addEventListener("input", () => {
+    if (id === "whyILikeThis" && currentBrief) currentBrief.whyILikeThis = $("#whyILikeThis").value.trim();
     $("#previewTitle").textContent = $("#createTitle").value.trim() || "dig.everyday";
     $("#previewHook").textContent = $("#hookLine").value.trim() || currentDeck[0]?.[1] || "";
     renderPreviewDeck(currentDeck, currentFormat, topic(), postCategory());

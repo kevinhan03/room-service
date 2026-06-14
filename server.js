@@ -389,17 +389,23 @@ function validateResearchInput(body) {
 
 function validateDeckInput(body) {
   const input = {
+    curationItemId: cleanString(body.curationItemId),
     title: cleanString(body.title, "Untitled Space"),
     format: cleanString(body.format, "Check-in"),
     angle: cleanString(body.angle),
+    whyILikeThis: cleanString(body.whyILikeThis),
+    kevinAngle: cleanString(body.kevinAngle),
     hook: cleanString(body.hook),
     notes: cleanString(body.notes),
     imageCredit: cleanString(body.imageCredit),
     imageUsageStatus: cleanString(body.imageUsageStatus, "unknown")
   };
   assertMaxLength(input.title, 120, "title");
+  assertMaxLength(input.curationItemId, 80, "curationItemId");
   assertMaxLength(input.format, 40, "format");
   assertMaxLength(input.angle, 2000, "angle");
+  assertMaxLength(input.whyILikeThis, 4000, "whyILikeThis");
+  assertMaxLength(input.kevinAngle, 1000, "kevinAngle");
   assertMaxLength(input.hook, 1000, "hook");
   assertMaxLength(input.notes, 12000, "notes");
   assertMaxLength(input.imageCredit, 240, "imageCredit");
@@ -466,6 +472,7 @@ function validateDeckGenerated(generated) {
   }
   return {
     cards,
+    kevinAngle: cleanString(generated.kevin_angle || generated.kevinAngle),
     caption: cleanString(generated.caption),
     hashtags: Array.isArray(generated.hashtags) ? generated.hashtags.map((tag) => cleanString(tag)).filter(Boolean) : [],
     creditNote: cleanString(generated.credit_note || generated.creditNote),
@@ -544,7 +551,7 @@ async function supabaseRequest(pathname, options = {}) {
   const text = await response.text();
   if (!response.ok) {
     const migrationMissing = [400, 404].includes(response.status)
-      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count", "image_url", "kevin_inbox_items", "kevin_inbox_ideas"].some((name) => text.includes(name));
+      && ["human_decision", "human_saved", "last_recommended_at", "recommendation_count", "image_url", "kevin_inbox_items", "kevin_inbox_ideas", "why_i_like_this", "kevin_angle", "personal_relevance_score", "why_note_updated_at"].some((name) => text.includes(name));
     if (migrationMissing) {
       throw new AppError("A required Supabase migration has not been applied.", 503, "MIGRATION_REQUIRED", text.slice(0, 500));
     }
@@ -587,6 +594,8 @@ function normalizeBoardRow(row) {
   const normalizedImageUrl = normalizeExternalUrl(source.image_url || "", sourceUrl);
   const imageUrl = /^https?:\/\//i.test(normalizedImageUrl) ? normalizedImageUrl : "";
   const displayTitle = decodeXml(source.title || source.name || analysis?.generated_title || "Untitled Find");
+  const whyILikeThis = cleanString(row.why_i_like_this);
+  const inferredPersonalRelevance = whyILikeThis ? (whyILikeThis.length >= 50 ? 90 : 80) : 0;
   return {
     id: row.id,
     itemType: row.item_type,
@@ -598,6 +607,12 @@ function normalizeBoardRow(row) {
     lastRecommendedAt: row.last_recommended_at || null,
     recommendationCount: Number(row.recommendation_count || 0),
     editorNote: row.editor_note || "",
+    whyILikeThis,
+    kevinAngle: cleanString(row.kevin_angle),
+    personalRelevanceScore: Number.isFinite(Number(row.personal_relevance_score))
+      ? Number(row.personal_relevance_score)
+      : inferredPersonalRelevance,
+    whyNoteUpdatedAt: row.why_note_updated_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     contentItemId: row.content_item_id,
@@ -1563,6 +1578,38 @@ async function handleUpdateBoardItem(req, res, id) {
   }
 }
 
+async function handleUpdateWhyNote(req, res, id) {
+  try {
+    const body = await readBody(req);
+    const whyILikeThis = cleanString(body.whyILikeThis);
+    const kevinAngle = cleanString(body.kevinAngle);
+    assertMaxLength(whyILikeThis, 4000, "whyILikeThis");
+    assertMaxLength(kevinAngle, 1000, "kevinAngle");
+    const personalRelevanceScore = whyILikeThis ? (whyILikeThis.length >= 50 ? 90 : 80) : 0;
+    const now = new Date().toISOString();
+    const patch = {
+      why_i_like_this: whyILikeThis || null,
+      personal_relevance_score: personalRelevanceScore,
+      why_note_updated_at: now,
+      updated_at: now
+    };
+    if (kevinAngle) patch.kevin_angle = kevinAngle;
+    const rows = await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    });
+    if (!rows?.[0]) throw new AppError("Board item not found.", 404, "INVALID_INPUT", id);
+    const recommendationDate = getZonedParts().date;
+    await supabaseRequest(`recommendation_snapshots?recommendation_date=eq.${recommendationDate}`, {
+      method: "DELETE",
+      headers: { Prefer: "" }
+    });
+    sendJson(res, 200, { item: normalizeBoardRow(rows[0]) });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
 async function handleSaveDailyFind(req, res) {
   try {
     const body = await readBody(req);
@@ -2408,6 +2455,10 @@ async function callOpenAICreateDeck(input, revision = null) {
             "Each sentence should contain a fact, scene, useful detail, or clear personal observation.",
             "Vary sentence length. Natural short fragments are allowed, but do not make every line a slogan.",
             "Research notes are evidence, not a writing style. Never copy their abstract wording.",
+            "The editorial priority is strict: (1) whyILikeThis, (2) kevinAngle, (3) angle and analysis, (4) factual notes.",
+            "whyILikeThis is Kevin's own editorial judgment. Preserve its plain vocabulary and use it to decide what the post is really about.",
+            "When whyILikeThis is present, Why It Matters and Editor's Note must clearly express that thought without turning it into an unsupported fact.",
+            "Generate kevin_angle as one restrained Korean sentence that clarifies Kevin's point of view. Do not use editorial jargon.",
             "Avoid stacked nouns and translated English phrasing.",
             "Do not use metaphors, personification, poetic travel writing, or scene-setting details that are not in the input.",
             "Do not explain that something provides an experience. Describe what a person actually sees, does, hears, orders, or remembers.",
@@ -2451,6 +2502,7 @@ async function callOpenAICreateDeck(input, revision = null) {
             ...assignment,
             "JSON shape:",
             "{",
+            '  "kevin_angle": "one restrained Korean sentence distilled from whyILikeThis",',
             "  \"cards\": [{\"title\": \"Cover\", \"copy\": \"1-3 short Korean lines\"}, {\"title\": \"Introduction\", \"copy\": \"...\"}, {\"title\": \"Why It Matters\", \"copy\": \"...\"}, {\"title\": \"Detail 1\", \"copy\": \"...\"}, {\"title\": \"Detail 2\", \"copy\": \"...\"}, {\"title\": \"Editor's Note\", \"copy\": \"...\"}, {\"title\": \"CTA\", \"copy\": \"...\"}],",
             '  "caption": "short Korean caption",',
             '  "hashtags": ["#..."],',
@@ -2524,8 +2576,19 @@ async function handleCreateDeck(req, res) {
       }));
     }
 
+    if (input.curationItemId && generated.kevinAngle) {
+      await supabaseRequest(`curation_items?id=eq.${encodeURIComponent(input.curationItemId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          kevin_angle: generated.kevinAngle,
+          updated_at: new Date().toISOString()
+        })
+      });
+    }
+
     sendJson(res, 200, {
       cards: generated.cards,
+      kevinAngle: generated.kevinAngle || input.kevinAngle || "",
       caption: generated.caption || "",
       hashtags: generated.hashtags || [],
       creditNote: generated.creditNote || "",
@@ -2737,6 +2800,11 @@ function requestHandler(req, res) {
   const boardDecisionMatch = pathname.match(/^\/api\/curation-items\/([^/]+)\/decision$/);
   if (boardDecisionMatch && req.method === "PATCH") {
     handleDecision(req, res, boardDecisionMatch[1]);
+    return;
+  }
+  const boardWhyNoteMatch = pathname.match(/^\/api\/curation-items\/([^/]+)\/why-note$/);
+  if (boardWhyNoteMatch && req.method === "PATCH") {
+    handleUpdateWhyNote(req, res, boardWhyNoteMatch[1]);
     return;
   }
   const boardItemMatch = pathname.match(/^\/api\/curation-items\/([^/]+)$/);

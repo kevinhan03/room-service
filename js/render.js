@@ -69,6 +69,7 @@ export function renderBrief(brief) {
   ].filter(([, body]) => body);
   $("#researchOutput").innerHTML = analysisCards.map(([title, body]) => `<div class="insight-card"><p class="insight-title">${safeText(title)}</p><p class="insight-body">${safeText(body)}</p></div>`).join("") || `<div class="insight-card"><p class="insight-title">Editorial Angle</p><p class="insight-body">${safeText(brief.angle)}</p></div>`;
   $("#createTitle").value = brief.name;
+  if ($("#whyILikeThis")) $("#whyILikeThis").value = brief.whyILikeThis || "";
   $("#editorialAngle").value = brief.editorialAngle || brief.angle || "";
   $("#hookLine").value = makeDefaultHook(brief.name);
   $("#previewTitle").textContent = brief.name;
@@ -112,6 +113,10 @@ export function renderArchiveItems(items) {
         <p class="archive-summary">${safeText(summary)}</p>
         <div class="archive-score-row">${score("Suitability", item.suitabilityScore)}${score("Taste", item.tasteFitScore)}${score("Visual", item.visualScore)}${score("Story", item.storyScore)}</div>
         <div class="archive-angle"><span>Editorial angle</span><p>${safeText(angle)}</p></div>
+        <div class="why-note-box">
+          <div class="why-note-head"><strong>Why I Like This</strong><span class="why-note-status" data-why-note-status="${safeText(item.id)}">${item.whyNoteUpdatedAt ? "저장됨" : "입력 대기"}</span></div>
+          <textarea class="why-note-input" data-why-note="${safeText(item.id)}" placeholder="왜 이게 좋았는지 한두 줄로 적어보세요. 최종 게시물은 이 메모를 중심으로 작성됩니다.">${safeText(item.whyILikeThis || "")}</textarea>
+        </div>
         <p class="archive-date">${safeText(createdAt)}</p>
       </div>
     </article>`;

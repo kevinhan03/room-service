@@ -5,14 +5,14 @@
       "maxDuration": 300
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index?__path=:path*"
+      "src": "/api/(.*)",
+      "dest": "/api/index?__path=$1"
     },
     {
-      "source": "/:path*",
-      "destination": "/api/index?__site_path=:path*"
+      "src": "/(.*)",
+      "dest": "/api/index?__site_path=$1"
     }
   ]
 }

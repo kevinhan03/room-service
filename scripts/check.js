@@ -3,7 +3,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const root = path.join(__dirname, "..");
-const targets = ["server.js", "api", "lib", "routes", "js"];
+const targets = ["server.js", "api", "lib", "routes", "js", "figma-plugin/code.js"];
 
 function javascriptFiles(target) {
   const absolute = path.join(root, target);

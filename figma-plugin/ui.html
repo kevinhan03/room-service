@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>dig.everyday Deck Importer</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;padding:18px;background:var(--figma-color-bg);color:var(--figma-color-text);font:12px/1.5 Inter,Arial,sans-serif}
+    h1{margin:0 0 6px;font-size:16px}
+    p{margin:0 0 14px;color:var(--figma-color-text-secondary)}
+    textarea{width:100%;height:400px;resize:none;border:1px solid var(--figma-color-border);border-radius:6px;padding:10px;background:var(--figma-color-bg-secondary);color:var(--figma-color-text);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+    textarea:focus{outline:2px solid var(--figma-color-border-brand);outline-offset:-1px}
+    .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+    button{border:1px solid var(--figma-color-border);border-radius:6px;padding:8px 14px;background:var(--figma-color-bg);color:var(--figma-color-text);font:600 12px Inter,Arial,sans-serif;cursor:pointer}
+    button.primary{border-color:var(--figma-color-bg-brand);background:var(--figma-color-bg-brand);color:var(--figma-color-text-onbrand)}
+    button:disabled{opacity:.55;cursor:wait}
+    #status{min-height:18px;margin-top:8px;color:var(--figma-color-text-danger)}
+  </style>
+</head>
+<body>
+  <h1>dig.everyday Deck Importer</h1>
+  <p>Builder에서 받은 Figma JSON을 붙여넣으세요. 사진은 placeholder로 비워 둡니다.</p>
+  <textarea id="payload" spellcheck="false" placeholder='{"schema":"dig.everyday.figma-deck", ...}'></textarea>
+  <div id="status" role="status"></div>
+  <div class="actions">
+    <button id="cancel" type="button">닫기</button>
+    <button id="import" class="primary" type="button">Import</button>
+  </div>
+  <script>
+    const payload = document.getElementById("payload");
+    const status = document.getElementById("status");
+    const importButton = document.getElementById("import");
+
+    document.getElementById("cancel").onclick = () => {
+      parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
+    };
+
+    importButton.onclick = () => {
+      status.textContent = "";
+      let parsed;
+      try {
+        parsed = JSON.parse(payload.value);
+      } catch {
+        status.textContent = "JSON 문법을 확인해 주세요.";
+        return;
+      }
+      importButton.disabled = true;
+      importButton.textContent = "생성 중...";
+      parent.postMessage({ pluginMessage: { type: "import", payload: parsed } }, "*");
+    };
+
+    onmessage = (event) => {
+      const message = event.data.pluginMessage;
+      if (!message) return;
+      importButton.disabled = false;
+      importButton.textContent = "Import";
+      if (message.type === "error") status.textContent = message.message;
+      if (message.type === "success") status.textContent = "7개 프레임을 생성했습니다.";
+    };
+  </script>
+</body>
+</html>

@@ -78,6 +78,7 @@ async function run() {
     await expectStatus("/styles.css", 200, cookie);
     await expectStatus("/js/app.js", 200, cookie);
     await expectStatus("/js/common.js", 200, cookie);
+    await expectStatus("/js/figma-export.js", 200, cookie);
     await expectStatus("/js/images.js", 200, cookie);
     await expectStatus("/js/features/board.js", 200, cookie);
     await expectStatus("/js/features/inbox.js", 200, cookie);

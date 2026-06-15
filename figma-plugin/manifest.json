@@ -1,0 +1,12 @@
+{
+  "name": "dig.everyday Deck Importer",
+  "id": "1497428306159264001",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "code.js",
+  "ui": "ui.html",
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

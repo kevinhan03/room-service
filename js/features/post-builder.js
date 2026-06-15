@@ -9,6 +9,7 @@ import {
   uploadPostSlideImage
 } from "../api.js";
 import { actionErrorMessage, formatDateTime } from "../common.js";
+import { downloadFigmaExport } from "../figma-export.js";
 import { downloadDeckPngPack, resizeImage } from "../images.js";
 import {
   $,
@@ -317,6 +318,25 @@ export function createPostBuilderFeature() {
     }
   }
 
+  function downloadFigmaJson() {
+    if (deck.length !== 7) {
+      showToast("먼저 7장 Draft를 생성해 주세요.", "error");
+      return;
+    }
+    const button = $("#downloadFigmaJson");
+    setBusy(button, true, "준비 중...");
+    try {
+      downloadFigmaExport(deck, topic(), postCategory());
+      $("#exportStatus").textContent = "Figma 플러그인용 JSON을 다운로드했습니다.";
+      showToast("Figma JSON을 준비했습니다.");
+    } catch (error) {
+      $("#exportStatus").textContent = `Figma JSON 생성 실패: ${error.message}`;
+      showToast("Figma JSON 생성에 실패했습니다.", "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
   function bindEvents() {
     $("#deckEditor")?.addEventListener("input", (event) => {
       const titleField = event.target.closest("[data-card-title]");
@@ -443,6 +463,7 @@ export function createPostBuilderFeature() {
     });
     $("#draftStatus")?.addEventListener("change", scheduleDraftSave);
     $("#downloadPngPack")?.addEventListener("click", downloadPngPack);
+    $("#downloadFigmaJson")?.addEventListener("click", downloadFigmaJson);
     $("#copyCaption")?.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText($("#captionText").textContent);

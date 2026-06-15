@@ -9,7 +9,14 @@
     body{margin:0;padding:18px;background:var(--figma-color-bg);color:var(--figma-color-text);font:12px/1.5 Inter,Arial,sans-serif}
     h1{margin:0 0 6px;font-size:16px}
     p{margin:0 0 14px;color:var(--figma-color-text-secondary)}
-    textarea{width:100%;height:400px;resize:none;border:1px solid var(--figma-color-border);border-radius:6px;padding:10px;background:var(--figma-color-bg-secondary);color:var(--figma-color-text);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+    .file-box{display:grid;place-items:center;min-height:260px;border:1px dashed var(--figma-color-border);border-radius:8px;background:var(--figma-color-bg-secondary);text-align:center;padding:24px;cursor:pointer}
+    .file-box.dragging{border-color:var(--figma-color-border-brand);background:var(--figma-color-bg-brand-tertiary)}
+    .file-box strong{display:block;margin-bottom:7px;font-size:13px}
+    .file-box span{color:var(--figma-color-text-secondary)}
+    input[type=file]{display:none}
+    details{margin-top:14px}
+    summary{cursor:pointer;color:var(--figma-color-text-secondary)}
+    textarea{width:100%;height:120px;margin-top:8px;resize:none;border:1px solid var(--figma-color-border);border-radius:6px;padding:10px;background:var(--figma-color-bg-secondary);color:var(--figma-color-text);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
     textarea:focus{outline:2px solid var(--figma-color-border-brand);outline-offset:-1px}
     .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
     button{border:1px solid var(--figma-color-border);border-radius:6px;padding:8px 14px;background:var(--figma-color-bg);color:var(--figma-color-text);font:600 12px Inter,Arial,sans-serif;cursor:pointer}
@@ -20,8 +27,15 @@
 </head>
 <body>
   <h1>dig.everyday Deck Importer</h1>
-  <p>Builder에서 받은 Figma JSON을 붙여넣으세요. 사진은 placeholder로 비워 둡니다.</p>
-  <textarea id="payload" spellcheck="false" placeholder='{"schema":"dig.everyday.figma-deck", ...}'></textarea>
+  <p>Builder에서 다운로드한 <strong>*-figma.json</strong> 파일을 선택하세요.</p>
+  <label class="file-box" id="dropZone">
+    <input id="fileInput" type="file" accept=".json,application/json">
+    <span><strong>JSON 파일 선택</strong><span id="fileName">클릭하거나 파일을 여기에 끌어놓으세요.</span></span>
+  </label>
+  <details>
+    <summary>JSON 직접 붙여넣기</summary>
+    <textarea id="payload" spellcheck="false" placeholder='{"schema":"dig.everyday.figma-deck", ...}'></textarea>
+  </details>
   <div id="status" role="status"></div>
   <div class="actions">
     <button id="cancel" type="button">닫기</button>
@@ -31,6 +45,39 @@
     const payload = document.getElementById("payload");
     const status = document.getElementById("status");
     const importButton = document.getElementById("import");
+    const fileInput = document.getElementById("fileInput");
+    const fileName = document.getElementById("fileName");
+    const dropZone = document.getElementById("dropZone");
+    let selectedPayload = null;
+
+    function readFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          selectedPayload = JSON.parse(reader.result);
+          payload.value = reader.result;
+          fileName.textContent = file.name;
+          status.textContent = "파일을 읽었습니다. Import를 누르세요.";
+        } catch {
+          selectedPayload = null;
+          status.textContent = "올바른 JSON 파일이 아닙니다.";
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    fileInput.onchange = () => readFile(fileInput.files[0]);
+    dropZone.ondragover = (event) => {
+      event.preventDefault();
+      dropZone.classList.add("dragging");
+    };
+    dropZone.ondragleave = () => dropZone.classList.remove("dragging");
+    dropZone.ondrop = (event) => {
+      event.preventDefault();
+      dropZone.classList.remove("dragging");
+      readFile(event.dataTransfer.files[0]);
+    };
 
     document.getElementById("cancel").onclick = () => {
       parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
@@ -38,11 +85,11 @@
 
     importButton.onclick = () => {
       status.textContent = "";
-      let parsed;
+      let parsed = selectedPayload;
       try {
-        parsed = JSON.parse(payload.value);
+        if (!parsed) parsed = JSON.parse(payload.value);
       } catch {
-        status.textContent = "JSON 문법을 확인해 주세요.";
+        status.textContent = "먼저 JSON 파일을 선택해 주세요.";
         return;
       }
       importButton.disabled = true;

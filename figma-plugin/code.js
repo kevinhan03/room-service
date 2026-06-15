@@ -49,12 +49,6 @@ function figmaAlignment(value) {
   return "LEFT";
 }
 
-function primaryAxisAlignment(value) {
-  if (value === "top") return "MIN";
-  if (value === "bottom") return "MAX";
-  return "CENTER";
-}
-
 async function loadTextFont(textSpec) {
   var style = Number(textSpec.fontWeight) >= 600 ? "Bold" : "Regular";
   var preferred = { family: textSpec.fontFamily || "Arial", style: style };
@@ -75,10 +69,12 @@ async function createTextNode(textSpec) {
   text.fontSize = textSpec.fontSize;
   text.lineHeight = { unit: "PIXELS", value: textSpec.lineHeight };
   text.textAlignHorizontal = figmaAlignment(textSpec.align);
-  text.fills = [solidPaint(textSpec.color, 1)];
+  text.fills = [solidPaint(textSpec.color, textSpec.opacity == null ? 1 : textSpec.opacity)];
   text.characters = String(textSpec.text || "").replace(/\r\n?/g, "\n");
   text.resize(textSpec.width, Math.max(textSpec.lineHeight, textSpec.fontSize));
   text.textAutoResize = "HEIGHT";
+  text.x = textSpec.x || 0;
+  text.y = textSpec.y || 0;
   return text;
 }
 
@@ -111,28 +107,9 @@ async function createCard(card, x, y) {
   var overlay = createRectangle(card.overlay, "Overlay", [overlayPaint(card.overlay)]);
   frame.appendChild(overlay);
 
-  var containerSpec = card.textContainer;
-  var container = figma.createFrame();
-  container.name = "Text";
-  container.x = containerSpec.x;
-  container.y = containerSpec.y;
-  container.resize(containerSpec.width, containerSpec.height);
-  container.fills = [];
-  container.clipsContent = false;
-  container.layoutMode = "VERTICAL";
-  container.primaryAxisAlignItems = primaryAxisAlignment(containerSpec.verticalAlign);
-  container.counterAxisAlignItems = "MIN";
-  container.itemSpacing = containerSpec.itemSpacing || 0;
-  container.paddingTop = containerSpec.paddingTop || 0;
-  container.paddingBottom = containerSpec.paddingBottom || 0;
-  container.paddingLeft = 0;
-  container.paddingRight = 0;
-  frame.appendChild(container);
-
   for (var textIndex = 0; textIndex < card.texts.length; textIndex += 1) {
     var text = await createTextNode(card.texts[textIndex]);
-    container.appendChild(text);
-    text.layoutAlign = "STRETCH";
+    frame.appendChild(text);
   }
   return frame;
 }
@@ -143,6 +120,9 @@ function validatePayload(payload) {
   }
   if (!Array.isArray(payload.cards) || payload.cards.length !== 7) {
     throw new Error("정확히 7장의 카드가 필요합니다.");
+  }
+  if (Number(payload.version) < 2) {
+    throw new Error("이 JSON은 이전 형식입니다. 사이트에서 다시 내려받아 주세요.");
   }
 }
 

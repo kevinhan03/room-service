@@ -327,8 +327,8 @@ export function createPostBuilderFeature() {
     setBusy(button, true, "준비 중...");
     try {
       downloadFigmaExport(deck, topic(), postCategory());
-      $("#exportStatus").textContent = "Figma 플러그인용 JSON을 다운로드했습니다.";
-      showToast("Figma JSON을 준비했습니다.");
+      $("#exportStatus").textContent = "Figma 파일을 다운로드했습니다. 플러그인에서 이 파일을 선택하세요.";
+      showToast("Figma용 파일을 준비했습니다.");
     } catch (error) {
       $("#exportStatus").textContent = `Figma JSON 생성 실패: ${error.message}`;
       showToast("Figma JSON 생성에 실패했습니다.", "error");

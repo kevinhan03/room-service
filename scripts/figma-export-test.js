@@ -33,6 +33,18 @@ const context = {
       }
     },
     createElement(tag) {
+      if (tag === "canvas") {
+        return {
+          getContext() {
+            return {
+              font: "",
+              measureText(text) {
+                return { width: String(text).length * 20 };
+              }
+            };
+          }
+        };
+      }
       assert.equal(tag, "a");
       return {
         click() {
@@ -68,12 +80,16 @@ assert.equal(payload.cards[0].role, "cover");
 assert.equal(payload.cards[0].texts[1].text, "첫 줄\n둘째 줄");
 assert.equal(payload.cards[0].texts[1].align, "right");
 assert.equal(payload.cards[0].texts[1].fontSize, 57.6);
-assert.equal(payload.cards[5].textContainer.verticalAlign, "center");
+assert.equal(payload.cards[0].texts[0].y, 460);
+assert.equal(payload.cards[0].texts[1].y, 510);
+assert.equal(payload.cards[1].texts[0].y, 1192);
 assert.equal(payload.cards[5].texts[0].color, "#ffeecc");
+assert.ok(Math.abs(payload.cards[5].texts[0].y - 886.2) < 0.001);
 assert.equal(payload.cards[6].role, "cta");
 assert.equal(payload.cards[6].overlay.type, "solid");
-assert.equal(payload.cards[6].textContainer.verticalAlign, "bottom");
+assert.ok(Math.abs(payload.cards[6].texts[0].y - 1133.6) < 0.001);
 assert.ok(!JSON.stringify(payload).includes("example.com"), "image URLs must not be exported");
+assert.equal(payload.version, 2);
 
 context.downloadFigmaExport(deck, "테스트 호텔", "Hotel");
 assert.equal(context.appendedLink.download, "테스트-호텔-figma.json");
@@ -92,6 +108,7 @@ assert.ok(pluginSource.includes('figma.createFrame()'));
 assert.ok(pluginSource.includes('type: "GRADIENT_LINEAR"'));
 assert.ok(pluginSource.includes('figma.loadFontAsync'));
 assert.ok(pluginSource.includes('family: "Inter"'));
+assert.ok(pluginSource.includes("Number(payload.version) < 2"));
 assert.ok(!pluginSource.includes("..."), "Figma main code must avoid object spread syntax");
 assert.ok(!pluginSource.includes("?."), "Figma main code must avoid optional chaining");
 assert.ok(!pluginSource.includes("=>"), "Figma main code must avoid arrow functions");

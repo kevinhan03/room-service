@@ -2,7 +2,8 @@ import { getTextStyle } from "./render.js";
 
 const FRAME_WIDTH = 1080;
 const FRAME_HEIGHT = 1350;
-const TEXT_MARGIN = 90;
+const TEXT_X = 86;
+const TEXT_WIDTH = 908;
 
 function slugify(value) {
   return String(value || "dig-everyday")
@@ -15,6 +16,29 @@ function normalizeLineBreaks(value) {
   return String(value || "").replace(/\r\n?/g, "\n");
 }
 
+function wrapText(text, fontWeight, fontSize, maxWidth, maxLines) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  context.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+  const paragraphs = normalizeLineBreaks(text).split(/\n/);
+  const lines = [];
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let line = "";
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width <= maxWidth || !line) line = candidate;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    });
+    if (line) lines.push(line);
+    if (!words.length && paragraphIndex < paragraphs.length - 1) lines.push("");
+  });
+  return lines.slice(0, maxLines);
+}
+
 function textNode({
   name,
   text,
@@ -25,7 +49,8 @@ function textNode({
   align,
   width,
   x = 0,
-  y = 0
+  y = 0,
+  opacity = 1
 }) {
   return {
     type: "text",
@@ -39,7 +64,8 @@ function textNode({
     fontSize,
     fontWeight,
     lineHeight,
-    color
+    color,
+    opacity
   };
 }
 
@@ -59,16 +85,19 @@ function gradientOverlay(y, height, middleOpacity, endOpacity) {
   };
 }
 
-function verticalAlignment(position) {
-  if (position === "top") return "top";
-  if (position === "bottom") return "bottom";
-  return "center";
-}
-
 function coverCard(card, index, total, subject, category) {
   const style = getTextStyle(card, index, total);
-  const textWidth = 900;
   const fontScale = style.fontScale;
+  const hookFontSize = 64 * fontScale;
+  const hookLineHeight = 74 * fontScale;
+  const hookLines = wrapText(card[1], 700, hookFontSize, 900, 4);
+  let metaY;
+  if (style.position === "top") metaY = 460;
+  else if (style.position === "center") {
+    const blockHeight = 50 + hookLines.length * hookLineHeight;
+    metaY = 420 + (FRAME_HEIGHT - 420 - blockHeight) / 2;
+  } else metaY = 1010;
+  const hookY = style.position === "bottom" ? 1064 : metaY + 50;
   return {
     index: index + 1,
     role: "cover",
@@ -76,16 +105,6 @@ function coverCard(card, index, total, subject, category) {
     size: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
     placeholder: { x: 0, y: 0, width: FRAME_WIDTH, height: FRAME_HEIGHT, color: "#d8d6cf" },
     overlay: gradientOverlay(420, 930, 0.15, 0.8),
-    textContainer: {
-      x: TEXT_MARGIN,
-      y: 420,
-      width: textWidth,
-      height: 930,
-      verticalAlign: verticalAlignment(style.position),
-      paddingTop: 40,
-      paddingBottom: 46,
-      itemSpacing: 22
-    },
     texts: [
       textNode({
         name: "Meta",
@@ -95,21 +114,22 @@ function coverCard(card, index, total, subject, category) {
         lineHeight: 28,
         color: "#ffffff",
         align: style.align,
-        width: textWidth,
-        x: 0,
-        y: 0
+        width: TEXT_WIDTH,
+        x: TEXT_X,
+        y: metaY,
+        opacity: 0.82
       }),
       textNode({
         name: "Hook",
-        text: card[1],
-        fontSize: 64 * fontScale,
+        text: hookLines.join("\n"),
+        fontSize: hookFontSize,
         fontWeight: 700,
-        lineHeight: 74 * fontScale,
+        lineHeight: hookLineHeight,
         color: style.color,
         align: style.align,
-        width: textWidth,
-        x: 0,
-        y: 50
+        width: TEXT_WIDTH,
+        x: TEXT_X,
+        y: hookY
       })
     ]
   };
@@ -117,8 +137,15 @@ function coverCard(card, index, total, subject, category) {
 
 function contentCard(card, index, total) {
   const style = getTextStyle(card, index, total);
-  const textWidth = 900;
   const fontScale = style.fontScale;
+  const fontSize = 30 * fontScale;
+  const lineHeight = 48 * fontScale;
+  const copyLines = wrapText(card[1], 400, fontSize, 900, 8);
+  const blockHeight = copyLines.length * lineHeight;
+  let copyY;
+  if (style.position === "top") copyY = 520;
+  else if (style.position === "center") copyY = 480 + (FRAME_HEIGHT - 480 - blockHeight) / 2;
+  else copyY = 1240 - blockHeight;
   return {
     index: index + 1,
     role: "content",
@@ -126,26 +153,18 @@ function contentCard(card, index, total) {
     size: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
     placeholder: { x: 0, y: 0, width: FRAME_WIDTH, height: FRAME_HEIGHT, color: "#d8d6cf" },
     overlay: gradientOverlay(480, 870, 0.18, 0.82),
-    textContainer: {
-      x: TEXT_MARGIN,
-      y: 480,
-      width: textWidth,
-      height: 870,
-      verticalAlign: verticalAlignment(style.position),
-      paddingTop: 40,
-      paddingBottom: 110,
-      itemSpacing: 0
-    },
     texts: [
       textNode({
         name: "Copy",
-        text: card[1],
-        fontSize: 30 * fontScale,
+        text: copyLines.join("\n"),
+        fontSize,
         fontWeight: 400,
-        lineHeight: 48 * fontScale,
+        lineHeight,
         color: style.color,
         align: style.align,
-        width: textWidth
+        width: TEXT_WIDTH,
+        x: TEXT_X,
+        y: copyY
       })
     ]
   };
@@ -153,8 +172,15 @@ function contentCard(card, index, total) {
 
 function ctaCard(card, index, total) {
   const style = getTextStyle(card, index, total);
-  const textWidth = 920;
   const fontScale = style.fontScale;
+  const fontSize = 50 * fontScale;
+  const lineHeight = 62 * fontScale;
+  const ctaLines = wrapText(card[1], 700, fontSize, 920, 4);
+  const blockHeight = ctaLines.length * lineHeight;
+  let ctaY;
+  if (style.position === "top") ctaY = 80;
+  else if (style.position === "bottom") ctaY = FRAME_HEIGHT - blockHeight - 80;
+  else ctaY = (FRAME_HEIGHT - blockHeight) / 2;
   return {
     index: index + 1,
     role: "cta",
@@ -170,26 +196,18 @@ function ctaCard(card, index, total) {
       color: "#000000",
       opacity: 0.42
     },
-    textContainer: {
-      x: 80,
-      y: 0,
-      width: textWidth,
-      height: FRAME_HEIGHT,
-      verticalAlign: verticalAlignment(style.position),
-      paddingTop: 80,
-      paddingBottom: 80,
-      itemSpacing: 0
-    },
     texts: [
       textNode({
         name: "CTA",
-        text: card[1],
-        fontSize: 50 * fontScale,
+        text: ctaLines.join("\n"),
+        fontSize,
         fontWeight: 700,
-        lineHeight: 62 * fontScale,
+        lineHeight,
         color: style.color,
         align: style.align,
-        width: textWidth
+        width: TEXT_WIDTH,
+        x: TEXT_X,
+        y: ctaY
       })
     ]
   };
@@ -201,7 +219,7 @@ export function buildFigmaExportPayload(deck, subject, category) {
   }
   return {
     schema: "dig.everyday.figma-deck",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     subject: normalizeLineBreaks(subject || "dig.everyday"),
     category: normalizeLineBreaks(category || "Find"),

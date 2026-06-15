@@ -92,5 +92,8 @@ assert.ok(pluginSource.includes('figma.createFrame()'));
 assert.ok(pluginSource.includes('type: "GRADIENT_LINEAR"'));
 assert.ok(pluginSource.includes('figma.loadFontAsync'));
 assert.ok(pluginSource.includes('family: "Inter"'));
+assert.ok(!pluginSource.includes("..."), "Figma main code must avoid object spread syntax");
+assert.ok(!pluginSource.includes("?."), "Figma main code must avoid optional chaining");
+assert.ok(!pluginSource.includes("=>"), "Figma main code must avoid arrow functions");
 
 console.log("Figma export payload and plugin contract tests passed.");

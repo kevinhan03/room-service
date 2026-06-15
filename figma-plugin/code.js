@@ -1,10 +1,10 @@
 figma.showUI(__html__, { width: 420, height: 560, themeColors: true });
 
 function hexToRgb(value) {
-  const hex = String(value || "#000000").replace("#", "");
-  const normalized = hex.length === 3
-    ? hex.split("").map((character) => character + character).join("")
-    : hex.padEnd(6, "0").slice(0, 6);
+  var hex = String(value || "#000000").replace("#", "");
+  var normalized = hex.length === 3
+    ? hex.split("").map(function (character) { return character + character; }).join("")
+    : (hex + "000000").slice(0, 6);
   return {
     r: parseInt(normalized.slice(0, 2), 16) / 255,
     g: parseInt(normalized.slice(2, 4), 16) / 255,
@@ -28,13 +28,18 @@ function overlayPaint(overlay) {
       [0, 1, 0],
       [-1, 0, 1]
     ],
-    gradientStops: overlay.stops.map((stop) => ({
-      position: stop.position,
-      color: {
-        ...hexToRgb(stop.color),
-        a: stop.opacity
-      }
-    }))
+    gradientStops: overlay.stops.map(function (stop) {
+      var rgb = hexToRgb(stop.color);
+      return {
+        position: stop.position,
+        color: {
+          r: rgb.r,
+          g: rgb.g,
+          b: rgb.b,
+          a: stop.opacity
+        }
+      };
+    })
   };
 }
 
@@ -51,20 +56,20 @@ function primaryAxisAlignment(value) {
 }
 
 async function loadTextFont(textSpec) {
-  const style = Number(textSpec.fontWeight) >= 600 ? "Bold" : "Regular";
-  const preferred = { family: textSpec.fontFamily || "Arial", style };
+  var style = Number(textSpec.fontWeight) >= 600 ? "Bold" : "Regular";
+  var preferred = { family: textSpec.fontFamily || "Arial", style: style };
   try {
     await figma.loadFontAsync(preferred);
     return preferred;
-  } catch {
-    const fallback = { family: "Inter", style };
+  } catch (error) {
+    var fallback = { family: "Inter", style: style };
     await figma.loadFontAsync(fallback);
     return fallback;
   }
 }
 
 async function createTextNode(textSpec) {
-  const text = figma.createText();
+  var text = figma.createText();
   text.name = textSpec.name || "Text";
   text.fontName = await loadTextFont(textSpec);
   text.fontSize = textSpec.fontSize;
@@ -78,7 +83,7 @@ async function createTextNode(textSpec) {
 }
 
 function createRectangle(spec, name, fills) {
-  const rectangle = figma.createRectangle();
+  var rectangle = figma.createRectangle();
   rectangle.name = name;
   rectangle.x = spec.x;
   rectangle.y = spec.y;
@@ -88,26 +93,26 @@ function createRectangle(spec, name, fills) {
 }
 
 async function createCard(card, x, y) {
-  const frame = figma.createFrame();
-  frame.name = `${String(card.index).padStart(2, "0")} · ${card.title || card.role}`;
+  var frame = figma.createFrame();
+  frame.name = String(card.index).padStart(2, "0") + " · " + (card.title || card.role);
   frame.x = x;
   frame.y = y;
   frame.resize(card.size.width, card.size.height);
   frame.clipsContent = true;
   frame.fills = [];
 
-  const placeholder = createRectangle(
+  var placeholder = createRectangle(
     card.placeholder,
     "IMAGE PLACEHOLDER · Drop photo or video here",
     [solidPaint(card.placeholder.color || "#d8d6cf", 1)]
   );
   frame.appendChild(placeholder);
 
-  const overlay = createRectangle(card.overlay, "Overlay", [overlayPaint(card.overlay)]);
+  var overlay = createRectangle(card.overlay, "Overlay", [overlayPaint(card.overlay)]);
   frame.appendChild(overlay);
 
-  const containerSpec = card.textContainer;
-  const container = figma.createFrame();
+  var containerSpec = card.textContainer;
+  var container = figma.createFrame();
   container.name = "Text";
   container.x = containerSpec.x;
   container.y = containerSpec.y;
@@ -124,8 +129,8 @@ async function createCard(card, x, y) {
   container.paddingRight = 0;
   frame.appendChild(container);
 
-  for (const textSpec of card.texts) {
-    const text = await createTextNode(textSpec);
+  for (var textIndex = 0; textIndex < card.texts.length; textIndex += 1) {
+    var text = await createTextNode(card.texts[textIndex]);
     container.appendChild(text);
     text.layoutAlign = "STRETCH";
   }
@@ -143,14 +148,15 @@ function validatePayload(payload) {
 
 async function importDeck(payload) {
   validatePayload(payload);
-  const gap = Number(payload.canvas?.gap) || 120;
-  const width = Number(payload.canvas?.width) || 1080;
-  const viewportCenter = figma.viewport.center;
-  const startX = viewportCenter.x - ((width + gap) * payload.cards.length - gap) / 2;
-  const startY = viewportCenter.y - 675;
-  const frames = [];
+  var canvas = payload.canvas || {};
+  var gap = Number(canvas.gap) || 120;
+  var width = Number(canvas.width) || 1080;
+  var viewportCenter = figma.viewport.center;
+  var startX = viewportCenter.x - ((width + gap) * payload.cards.length - gap) / 2;
+  var startY = viewportCenter.y - 675;
+  var frames = [];
 
-  for (let index = 0; index < payload.cards.length; index += 1) {
+  for (var index = 0; index < payload.cards.length; index += 1) {
     frames.push(await createCard(payload.cards[index], startX + index * (width + gap), startY));
   }
 
@@ -159,7 +165,7 @@ async function importDeck(payload) {
   figma.notify("7개 Figma 프레임을 만들었습니다.");
 }
 
-figma.ui.onmessage = async (message) => {
+figma.ui.onmessage = async function (message) {
   if (message.type === "cancel") {
     figma.closePlugin();
     return;

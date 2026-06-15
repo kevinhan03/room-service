@@ -3,6 +3,7 @@ const { sendJson, sendError, readBody, readLargeJsonBody } = require("../lib/htt
 const { cleanString, validateCards, validateDraftCards } = require("../lib/validate");
 const { supabaseRequest, requireSupabase } = require("../lib/supabase-client");
 const { fetchWithTimeout } = require("../lib/network");
+const { buildCanvaPptx, canvaExportFilename } = require("../lib/canva-pptx");
 
 async function handleSavePostDraft(req, res) {
   try {
@@ -39,7 +40,8 @@ async function handleSavePostDraft(req, res) {
         title: card.title,
         body: card.copy,
         image_url: card.imageUrl || null,
-        text_style: card.textStyle || {}
+        text_style: card.textStyle || {},
+        media_type: card.mediaType
       })))
     });
     sendJson(res, 200, { draft, slides: slideRows || [] });
@@ -100,7 +102,8 @@ async function handleUpdatePostDraft(req, res, id) {
         title: card.title,
         body: card.copy,
         image_url: card.imageUrl || null,
-        text_style: card.textStyle || {}
+        text_style: card.textStyle || {},
+        media_type: card.mediaType
       })))
     });
     sendJson(res, 200, { draft: draftRows?.[0] || null, slides: slides || [] });
@@ -179,11 +182,36 @@ async function handleDeletePostDraft(req, res, id) {
   }
 }
 
+async function handleCanvaExport(req, res, id) {
+  try {
+    const rows = await supabaseRequest(`post_drafts?select=*,post_slides(*)&id=eq.${encodeURIComponent(id)}&limit=1`, {
+      method: "GET",
+      headers: { Prefer: "" }
+    });
+    const draft = rows?.[0];
+    if (!draft) throw new AppError("Post draft not found.", 404, "INVALID_INPUT");
+    const slides = draft.post_slides || [];
+    if (slides.length !== 7) throw new AppError("Canva export requires exactly seven slides.", 400, "INVALID_INPUT");
+    const buffer = await buildCanvaPptx({ draft, slides });
+    const filename = canvaExportFilename(draft.title);
+    res.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Content-Length": buffer.length,
+      "Cache-Control": "no-store"
+    });
+    res.end(buffer);
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
 module.exports = {
   handleSavePostDraft,
   handleListPostDrafts,
   handleGetPostDraft,
   handleUpdatePostDraft,
   handleUploadPostSlideImage,
+  handleCanvaExport,
   handleDeletePostDraft
 };

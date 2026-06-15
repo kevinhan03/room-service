@@ -159,6 +159,7 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
   const safeCategory = safeText(category || format || "Find");
   $("#previewDeck").innerHTML = deck.map((card, index) => {
     const copy = safeText(card[1]);
+    const mediaType = card[4] === "video" ? "video" : "photo";
     const imageUrl = isWebUrl(card[2]) ? card[2] : "";
     const photoImageStyle = imageUrl
       ? ` style="background-image:url('${safeText(imageUrl.replace(/'/g, "%27"))}')"`
@@ -168,7 +169,8 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
     const fsVars = `--fs-scale:${textStyle.fontScale};--fs-color:${textStyle.color}`;
     if (index === 0) {
       return `<article class="rs-slide rs-cover-photo${imageClass}"${photoImageStyle}>
-        ${imageUrl ? "" : `<div class="rs-photo-placeholder">커버 사진을 추가하세요</div>`}
+        ${imageUrl ? "" : `<div class="rs-photo-placeholder">${mediaType === "video" ? "Canva에서 커버 영상을 추가하세요" : "커버 사진을 추가하세요"}</div>`}
+        ${mediaType === "video" ? '<span class="rs-media-badge">VIDEO</span>' : ""}
         <div class="rs-cover-photo-copy" data-pos="${textStyle.position}" data-align="${textStyle.align}">
           <p class="rs-cover-meta"><span>${safeTopic}</span><span aria-hidden="true">·</span><span>${safeCategory}</span></p>
           <h3 class="rs-cover-hook" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</h3>
@@ -178,7 +180,8 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
     }
     if (index < deck.length - 1) {
       return `<article class="rs-slide rs-photo-slide${imageClass}"${photoImageStyle}>
-        ${imageUrl ? "" : `<div class="rs-photo-placeholder">사진을 추가하세요</div>`}
+        ${imageUrl ? "" : `<div class="rs-photo-placeholder">${mediaType === "video" ? "Canva에서 영상을 추가하세요" : "사진을 추가하세요"}</div>`}
+        ${mediaType === "video" ? '<span class="rs-media-badge">VIDEO</span>' : ""}
         <div class="rs-photo-copy" data-pos="${textStyle.position}" data-align="${textStyle.align}">
           <p class="rs-photo-body" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</p>
         </div>
@@ -186,7 +189,8 @@ export function renderPreviewDeck(deck, format, topic, category = "") {
       </article>`;
     }
     return `<article class="rs-slide rs-cta-slide${imageClass}"${photoImageStyle} data-pos="${textStyle.position}" data-align="${textStyle.align}">
-      ${imageUrl ? "" : `<div class="rs-photo-placeholder">CTA 사진을 추가하세요</div>`}
+      ${imageUrl ? "" : `<div class="rs-photo-placeholder">${mediaType === "video" ? "Canva에서 CTA 영상을 추가하세요" : "CTA 사진을 추가하세요"}</div>`}
+      ${mediaType === "video" ? '<span class="rs-media-badge">VIDEO</span>' : ""}
       <p class="rs-cta-copy" style="${fsVars}" contenteditable="true" spellcheck="false" data-card-copy="${index}">${copy}</p>
       <button class="preview-copy-btn" data-copy-card="${index}" type="button">복사</button>
     </article>`;
@@ -198,12 +202,19 @@ export function renderDeckEditor(deck) {
   if (!editor) return;
   editor.innerHTML = deck.map((card, index) => {
     const imageUrl = isWebUrl(card[2]) ? card[2] : "";
+    const mediaType = card[4] === "video" ? "video" : "photo";
     const textStyle = getTextStyle(card, index, deck.length);
     const posBtn = (value, label) => `<button class="mini-btn style-btn${textStyle.position === value ? " active" : ""}" data-style-pos="${index}" data-value="${value}" type="button">${label}</button>`;
     const alignBtn = (value, label) => `<button class="mini-btn style-btn${textStyle.align === value ? " active" : ""}" data-style-align="${index}" data-value="${value}" type="button">${label}</button>`;
     return `<article class="editor-card">
       <div class="editor-top"><span class="editor-no">${index + 1}</span><input class="field editor-title-input" data-card-title="${index}" value="${safeText(card[0])}" aria-label="Card ${index + 1} title"></div>
       <textarea class="textarea editor-copy-input" data-card-copy="${index}" aria-label="Card ${index + 1} copy">${safeText(card[1])}</textarea>
+      <div class="editor-media-row" role="group" aria-label="Card ${index + 1} media type">
+        <span class="style-label">Canva 미디어</span>
+        <button class="mini-btn style-btn${mediaType === "photo" ? " active" : ""}" data-media-type="${index}" data-value="photo" type="button">사진</button>
+        <button class="mini-btn style-btn${mediaType === "video" ? " active" : ""}" data-media-type="${index}" data-value="video" type="button">영상</button>
+        <span class="editor-media-help">${mediaType === "video" ? "PPTX에 영상 placeholder로 표시됩니다." : "PPTX에 사진 placeholder로 표시됩니다."}</span>
+      </div>
       ${imageUrl ? `<img class="editor-image-preview" src="${safeText(imageUrl)}" alt="Card ${index + 1} preview">` : ""}
       <div class="editor-image-actions">
         <label class="mini-btn editor-upload-btn">사진 선택<input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" data-card-file="${index}"></label>

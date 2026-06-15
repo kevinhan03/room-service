@@ -170,7 +170,9 @@ create table if not exists post_slides (
   title text,
   body text,
   image_url text,
+  media_type text not null default 'photo' check (media_type in ('photo', 'video')),
   layout_key text,
+  text_style jsonb not null default '{}'::jsonb check (jsonb_typeof(text_style) = 'object'),
   created_at timestamptz not null default now(),
   unique (post_draft_id, slide_index)
 );

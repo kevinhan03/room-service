@@ -1,6 +1,7 @@
 import {
   createDeck,
   deletePostDraft,
+  downloadCanvaPptx,
   fetchPostDraft,
   insertPostDraft,
   loadPostDrafts,
@@ -168,7 +169,13 @@ export function createPostBuilderFeature() {
   }
 
   function draftCards() {
-    return deck.map(([title, copy, imageUrl, textStyle]) => ({ title, copy, imageUrl: imageUrl || "", textStyle: textStyle || {} }));
+    return deck.map(([title, copy, imageUrl, textStyle, mediaType]) => ({
+      title,
+      copy,
+      imageUrl: imageUrl || "",
+      textStyle: textStyle || {},
+      mediaType: mediaType === "video" ? "video" : "photo"
+    }));
   }
 
   function draftPayload() {
@@ -206,10 +213,12 @@ export function createPostBuilderFeature() {
         showToast("Draft를 저장했습니다.");
         await renderDrafts();
       }
+      return true;
     } catch (error) {
       console.error(error);
       $("#draftSaveStatus").textContent = "저장 실패";
       if (!silent) showToast(actionErrorMessage(error), "error");
+      return false;
     } finally {
       if (!silent) setBusy(button, false);
     }
@@ -265,7 +274,13 @@ export function createPostBuilderFeature() {
       postCategoryValue = draft.category || "";
       deck = [...(draft.post_slides || [])]
         .sort((a, b) => Number(a.slide_index) - Number(b.slide_index))
-        .map((slide) => [slide.title || slide.slide_type, slide.body || "", slide.image_url || "", slide.text_style || {}]);
+        .map((slide) => [
+          slide.title || slide.slide_type,
+          slide.body || "",
+          slide.image_url || "",
+          slide.text_style || {},
+          slide.media_type === "video" ? "video" : "photo"
+        ]);
       $("#createTitle").value = draft.title || "";
       $("#editorialAngle").value = draft.editor_note || "";
       $("#hookLine").value = draft.hook || deck[0]?.[1] || "";
@@ -337,6 +352,32 @@ export function createPostBuilderFeature() {
     }
   }
 
+  async function downloadCanvaDeck() {
+    if (deck.length !== 7) {
+      showToast("먼저 7장 Draft를 생성해 주세요.", "error");
+      return;
+    }
+    if (!draftId) {
+      showToast("먼저 Create Post로 Draft를 저장해 주세요.", "error");
+      return;
+    }
+    const button = $("#downloadCanvaPptx");
+    setBusy(button, true, "PPTX 생성 중...");
+    try {
+      const saved = await saveCurrentDraft(true);
+      if (!saved) throw new Error("Draft 저장에 실패해 최신 내용으로 내보낼 수 없습니다.");
+      const result = await downloadCanvaPptx(draftId);
+      $("#exportStatus").textContent = `${result.filename}을 다운로드했습니다. Canva에서 업로드해 사진과 영상을 교체하세요.`;
+      showToast("Canva용 4:5 PPTX를 준비했습니다.");
+    } catch (error) {
+      console.error(error);
+      $("#exportStatus").textContent = `Canva PPTX 생성 실패: ${error.message}`;
+      showToast(actionErrorMessage(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
   function bindEvents() {
     $("#deckEditor")?.addEventListener("input", (event) => {
       const titleField = event.target.closest("[data-card-title]");
@@ -384,6 +425,16 @@ export function createPostBuilderFeature() {
       }
       const posBtn = event.target.closest("[data-style-pos]");
       const alignBtn = event.target.closest("[data-style-align]");
+      const mediaBtn = event.target.closest("[data-media-type]");
+      if (mediaBtn) {
+        const index = Number(mediaBtn.dataset.mediaType);
+        if (!deck[index]) return;
+        deck[index][4] = mediaBtn.dataset.value === "video" ? "video" : "photo";
+        renderDeckEditor(deck);
+        renderPreviewDeck(deck, format, topic(), postCategory());
+        scheduleDraftSave();
+        return;
+      }
       const styleBtn = posBtn || alignBtn;
       if (!styleBtn) return;
       const index = Number(styleBtn.dataset.stylePos ?? styleBtn.dataset.styleAlign);
@@ -463,6 +514,7 @@ export function createPostBuilderFeature() {
     });
     $("#draftStatus")?.addEventListener("change", scheduleDraftSave);
     $("#downloadPngPack")?.addEventListener("click", downloadPngPack);
+    $("#downloadCanvaPptx")?.addEventListener("click", downloadCanvaDeck);
     $("#downloadFigmaJson")?.addEventListener("click", downloadFigmaJson);
     $("#copyCaption")?.addEventListener("click", async () => {
       try {

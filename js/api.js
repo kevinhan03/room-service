@@ -223,6 +223,26 @@ export function deletePostDraft(id) {
   return appRequest(`/api/post-drafts/${encodeURIComponent(id)}`, { method: "DELETE" }, "Post draft delete failed.");
 }
 
+export async function downloadCanvaPptx(id, fallbackName = "dig-everyday-canva-4x5.pptx") {
+  const response = await fetch(`/api/post-drafts/${encodeURIComponent(id)}/canva-export`, {
+    method: "GET"
+  });
+  if (!response.ok) return readJsonResponse(response, "Canva PPTX export failed.");
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const filename = encodedName ? decodeURIComponent(encodedName) : fallbackName;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return { filename };
+}
+
 export async function loadKevinFinds(search = "", category = "All") {
   const params = new URLSearchParams();
   if (search) params.set("search", search);

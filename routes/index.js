@@ -32,6 +32,7 @@ const {
   handleGetPostDraft,
   handleUpdatePostDraft,
   handleUploadPostSlideImage,
+  handleCanvaExport,
   handleDeletePostDraft
 } = require("./drafts");
 const {
@@ -69,6 +70,8 @@ function dispatchApiRequest(req, res, parsed) {
   if (postSlideImageMatch && method === "POST") {
     return handleUploadPostSlideImage(req, res, postSlideImageMatch[1], postSlideImageMatch[2]);
   }
+  const postDraftCanvaMatch = pathname.match(/^\/api\/post-drafts\/([^/]+)\/canva-export$/);
+  if (postDraftCanvaMatch && method === "GET") return handleCanvaExport(req, res, postDraftCanvaMatch[1]);
   const postDraftMatch = pathname.match(/^\/api\/post-drafts\/([^/]+)$/);
   if (postDraftMatch && method === "GET") return handleGetPostDraft(req, res, postDraftMatch[1]);
   if (postDraftMatch && method === "PATCH") return handleUpdatePostDraft(req, res, postDraftMatch[1]);

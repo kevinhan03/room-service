@@ -115,6 +115,8 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .editor-image-actions{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
 .editor-upload-btn{cursor:pointer;white-space:nowrap}
 .editor-image-url{min-width:0}
+.editor-media-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:9px 10px;border-radius:6px;background:var(--soft)}
+.editor-media-help{font-size:11px;color:var(--muted);margin-left:4px}
 .editor-style-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding-top:8px;border-top:1px solid var(--line)}
 .style-group{display:flex;align-items:center;gap:6px}
 .style-label{font-size:11px;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
@@ -130,6 +132,7 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .rs-photo-slide{background:#d8d6cf center/cover no-repeat;color:#fff}
 .rs-photo-slide:after{content:"";position:absolute;inset:38% 0 0;background:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.18) 28%,rgba(0,0,0,.82) 100%);pointer-events:none}
 .rs-photo-placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#77756f;font-size:13px;letter-spacing:.08em}
+.rs-media-badge{position:absolute;z-index:2;top:12px;right:12px;padding:5px 7px;border:1px solid rgba(255,255,255,.55);border-radius:4px;background:rgba(31,34,32,.52);color:#fff;font-size:9px;font-weight:700;letter-spacing:.12em}
 .rs-photo-copy{position:absolute;z-index:1;left:28px;right:28px;bottom:28px;display:grid;gap:10px;text-shadow:0 1px 16px rgba(0,0,0,.55)}
 .rs-photo-copy[data-pos="top"]{top:28px;bottom:auto}
 .rs-photo-copy[data-pos="center"]{top:50%;bottom:auto;transform:translateY(-50%)}
@@ -169,6 +172,7 @@ h2{font-family:Georgia,serif;font-size:42px;font-weight:400}
 .preview-copy-btn:hover{opacity:1}
 .export-box{background:var(--deep);color:#fff;border-radius:8px;padding:18px;display:grid;gap:12px}
 .export-box .label{color:#bfc9c3}
+.export-help{font-size:12px;line-height:1.55;color:#bfc9c3}
 .caption{white-space:pre-wrap;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:7px;padding:14px;line-height:1.7;font-size:14px}
 .empty{padding:34px;text-align:center;border:1px dashed var(--line);border-radius:8px;color:var(--muted);background:rgba(255,255,255,.45)}
 @media(max-width:920px){.topbar{padding:0 16px}.section{padding:24px 16px 58px}.hero{grid-template-columns:1fr;min-height:auto}.span-4,.span-5,.span-7,.span-8{grid-column:span 12}}

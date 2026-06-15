@@ -3,11 +3,14 @@
     "start": "node server.js",
     "dev": "node server.js",
     "check": "node scripts/check.js",
-    "unit": "node scripts/personalization-test.js && node scripts/figma-export-test.js",
+    "unit": "node scripts/personalization-test.js && node scripts/figma-export-test.js && node scripts/canva-pptx-test.js",
     "smoke": "node scripts/smoke.js",
     "test": "npm run check && npm run unit && npm run smoke"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
   }
 }

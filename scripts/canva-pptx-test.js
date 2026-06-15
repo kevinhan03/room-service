@@ -34,8 +34,9 @@ async function main() {
   const presentation = await zip.file("ppt/presentation.xml").async("string");
   assert.match(presentation, /cx="7315200"\s+cy="9144000"/);
   const combinedSlides = (await Promise.all(slideFiles.map((name) => zip.file(name).async("string")))).join("\n");
-  assert.match(combinedSlides, /PHOTO PLACEHOLDER/);
-  assert.match(combinedSlides, /VIDEO PLACEHOLDER/);
+  assert.doesNotMatch(combinedSlides, /PHOTO PLACEHOLDER/);
+  assert.doesNotMatch(combinedSlides, /VIDEO PLACEHOLDER/);
+  assert.doesNotMatch(combinedSlides, /<a:solidFill><a:srgbClr val="D8D6CF"/);
   assert.match(combinedSlides, /첫 줄/);
   assert.match(combinedSlides, /둘째 줄/);
 
